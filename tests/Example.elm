@@ -1,8 +1,8 @@
-module Example exposing (..)
+module Example exposing (suite)
 
 import Expect exposing (Expectation)
 import Fuzz exposing (Fuzzer, int, list, string)
-import Test exposing (..)
+import Test exposing (Test, todo)
 
 
 suite : Test
