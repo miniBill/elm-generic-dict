@@ -20,11 +20,8 @@ module CustomDict exposing
 import Elm
 import Elm.Annotation as Type
 import Elm.Case
-import Elm.Let
-import Elm.Op
 import Elm.ToString
 import Gen.Dict
-import Gen.Maybe
 import String.Extra
 
 
@@ -112,13 +109,18 @@ generate (Config { keyType, toComparable, namespace }) =
 
         decls : List Elm.Declaration
         decls =
-            [ typeDeclaration utils
-            , emptyDeclaration utils
-            , singletonDeclaration utils
-            , insertDeclaration utils
-            , updateDeclaration utils
-            , sizeDeclaration utils
+            [ typeDeclaration
+            , emptyDeclaration
+            , singletonDeclaration
+            , insertDeclaration
+            , updateDeclaration
+            , removeDeclaration
+            , isEmptyDeclaration
+            , memberDeclaration
+            , getDeclaration
+            , sizeDeclaration
             ]
+                |> List.map (\f -> f utils)
     in
     Elm.file (namespace ++ [ dictTypeName ]) decls
 
@@ -136,50 +138,31 @@ typeDeclaration : Utils -> Elm.Declaration
 typeDeclaration { dictTypeName, comparableType } =
     Elm.customType dictTypeName
         [ Elm.variantWith dictTypeName
-            [ Type.int
-            , Gen.Dict.annotation_.dict
+            [ Gen.Dict.annotation_.dict
                 comparableType
                 (Type.var "v")
             ]
         ]
-        |> Elm.expose
-
-
-build : Utils -> Elm.Expression -> Elm.Expression -> Elm.Expression
-build { dictTypeName, annotation } size dict =
-    Elm.apply (Elm.val dictTypeName) [ size, dict ]
-        |> Elm.withType
-            (dict
-                |> Elm.ToString.expression
-                |> .signature
-                -- TODO: fix this
-                |> String.split " "
-                |> List.reverse
-                |> List.head
-                |> Maybe.withDefault "??"
-                |> annotation
-            )
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Dictionaries" }
 
 
 emptyDeclaration : Utils -> Elm.Declaration
-emptyDeclaration ({ annotation } as utils) =
-    build utils (Elm.int 0) Gen.Dict.empty
-        |> Elm.withType (annotation "v")
+emptyDeclaration utils =
+    build utils "v" Gen.Dict.empty
         |> Elm.declaration "empty"
-        |> Elm.expose
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Build" }
 
 
 singletonDeclaration : Utils -> Elm.Declaration
-singletonDeclaration ({ annotation, keyType, toComparable } as utils) =
+singletonDeclaration ({ keyType, toComparable } as utils) =
     Elm.fn2
         ( "key", Just keyType )
         ( "value", Just <| Type.var "v" )
         (\key value ->
-            build utils (Elm.int 1) (Gen.Dict.singleton (toComparable key) value)
-                |> Elm.withType (annotation "v")
+            build utils "v" (Gen.Dict.singleton (toComparable key) value)
         )
         |> Elm.declaration "singleton"
-        |> Elm.expose
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Build" }
 
 
 insertDeclaration : Utils -> Elm.Declaration
@@ -190,20 +173,14 @@ insertDeclaration ({ annotation, keyType, toComparable } as utils) =
         ( "d", Just (annotation "v") )
         (\key value ->
             decomposeDict utils
-                (\sz dict ->
+                (\dict ->
                     build utils
-                        (Elm.Op.plus sz (Elm.int 1))
+                        "v"
                         (Gen.Dict.insert (toComparable key) value dict)
-                 -- |> Elm.withType (annotation "v")
                 )
         )
-        -- |> Elm.withType
-        --     (Type.function
-        --         [ keyType, Type.var "v", annotation "v" ]
-        --         (annotation "v")
-        --     )
         |> Elm.declaration "insert"
-        |> Elm.expose
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Build" }
 
 
 updateDeclaration : Utils -> Elm.Declaration
@@ -217,67 +194,114 @@ updateDeclaration ({ keyType, annotation, toComparable } as utils) =
                 (Type.maybe <| Type.var "v")
         )
         ( "d", Just (annotation "v") )
-        (\key updater d ->
+        (\key updater ->
             decomposeDict utils
-                (\sz dict ->
-                    Elm.Let.letIn
-                        (\comparableKey ->
-                            Elm.Case.maybe
-                                (Gen.Dict.get comparableKey dict)
-                                { just =
-                                    ( "value"
-                                    , \value ->
-                                        Elm.Case.maybe (Elm.apply updater [ value ])
-                                            { just =
-                                                ( "newvalue"
-                                                , \newvalue ->
-                                                    build utils
-                                                        sz
-                                                        (Gen.Dict.insert comparableKey newvalue dict)
-                                                )
-                                            , nothing =
-                                                build utils
-                                                    (Elm.Op.minus sz (Elm.int 1))
-                                                    (Gen.Dict.remove comparableKey dict)
-                                            }
-                                    )
-                                , nothing =
-                                    Elm.Case.maybe (Elm.apply updater [ Gen.Maybe.make_.nothing ])
-                                        { just =
-                                            ( "newvalue"
-                                            , \newvalue ->
-                                                build utils
-                                                    (Elm.Op.plus sz (Elm.int 1))
-                                                    (Gen.Dict.insert comparableKey newvalue dict)
-                                            )
-                                        , nothing = d
-                                        }
-                                }
+                (\dict ->
+                    build utils
+                        "v"
+                        (Gen.Dict.update (toComparable key)
+                            (\e ->
+                                Elm.apply updater [ e ]
+                            )
+                            dict
                         )
-                        |> Elm.Let.value "comparableKey" (toComparable key)
-                        |> Elm.Let.toExpression
-                        |> Elm.withType (annotation "v")
                 )
-                d
         )
         |> Elm.declaration "update"
-        |> Elm.expose
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Build" }
 
 
-decomposeDict : Utils -> (Elm.Expression -> Elm.Expression -> Elm.Expression) -> Elm.Expression -> Elm.Expression
-decomposeDict { keyType, dictTypeName } f d =
-    Elm.Case.custom d
-        (Type.named [] dictTypeName)
-        [ Elm.Case.branch2 dictTypeName ( "sz", Type.int ) ( "dict", Gen.Dict.annotation_.dict keyType (Type.var "v") ) f
-        ]
+removeDeclaration : Utils -> Elm.Declaration
+removeDeclaration ({ keyType, annotation, toComparable } as utils) =
+    Elm.fn2
+        ( "key", Just keyType )
+        ( "d", Just (annotation "v") )
+        (\key ->
+            decomposeDict utils
+                (\dict ->
+                    build utils
+                        "v"
+                        (Gen.Dict.remove (toComparable key)
+                            dict
+                        )
+                )
+        )
+        |> Elm.declaration "remove"
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Build" }
+
+
+isEmptyDeclaration : Utils -> Elm.Declaration
+isEmptyDeclaration ({ annotation } as utils) =
+    Elm.fn
+        ( "d", Just (annotation "v") )
+        (decomposeDict utils
+            (\dict ->
+                build utils
+                    "v"
+                    (Gen.Dict.isEmpty
+                        dict
+                    )
+            )
+        )
+        |> Elm.declaration "isEmpty"
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Query" }
+
+
+memberDeclaration : Utils -> Elm.Declaration
+memberDeclaration ({ keyType, annotation, toComparable } as utils) =
+    Elm.fn2
+        ( "key", Just keyType )
+        ( "d", Just (annotation "v") )
+        (\key ->
+            decomposeDict utils
+                (\dict ->
+                    build utils
+                        "v"
+                        (Gen.Dict.member (toComparable key)
+                            dict
+                        )
+                )
+        )
+        |> Elm.declaration "member"
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Query" }
+
+
+getDeclaration : Utils -> Elm.Declaration
+getDeclaration ({ keyType, annotation, toComparable } as utils) =
+    Elm.fn2
+        ( "key", Just keyType )
+        ( "d", Just (annotation "v") )
+        (\key ->
+            decomposeDict utils
+                (\dict ->
+                    Gen.Dict.get (toComparable key)
+                        dict
+                )
+        )
+        |> Elm.declaration "get"
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Query" }
 
 
 sizeDeclaration : Utils -> Elm.Declaration
 sizeDeclaration ({ annotation } as utils) =
     Elm.fn ( "d", Just (annotation "v") )
-        (decomposeDict utils (\sz _ -> sz))
+        (decomposeDict utils Gen.Dict.size)
         |> Elm.declaration "size"
-        |> Elm.expose
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Query" }
+
+
+build : Utils -> String -> Elm.Expression -> Elm.Expression
+build { dictTypeName, annotation } var dict =
+    Elm.apply (Elm.val dictTypeName) [ dict ]
+        |> Elm.withType (annotation var)
+
+
+decomposeDict : Utils -> (Elm.Expression -> Elm.Expression) -> Elm.Expression -> Elm.Expression
+decomposeDict { comparableType, dictTypeName } f d =
+    Elm.Case.custom d
+        (Type.named [] dictTypeName)
+        [ Elm.Case.branch1 dictTypeName ( "dict", Gen.Dict.annotation_.dict comparableType (Type.var "v") ) f
+        ]
 
 
 
