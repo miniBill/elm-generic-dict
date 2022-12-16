@@ -3,25 +3,40 @@ module Main exposing (main)
 import Benchmark exposing (Benchmark)
 import Benchmark.Alternative
 import Benchmark.Runner.Alternative
+import Browser
 import Dict exposing (Dict)
 import DictDotDot as DDD
+import Html
+import List.Extra
+import Result.Extra
 
 
 main : Benchmark.Runner.Alternative.Program
 main =
-    Benchmark.Runner.Alternative.program suite
+    case suite of
+        Ok s ->
+            Benchmark.Runner.Alternative.program s
+
+        Err e ->
+            Browser.sandbox
+                { init = { suite = Benchmark.describe "" [] }
+                , view = \_ -> Html.pre [] [ Html.text e ]
+                , update = \_ model -> model
+                }
 
 
-suite : Benchmark
+suite : Result String Benchmark
 suite =
-    Benchmark.describe "Dict"
-        [ compare "intersect"
-            { core = Dict.intersect
-            , public = intersect
-            , dotdot = DDD.intersect
-            , private = intersectDotdot
-            }
-        ]
+    [ compare "intersect"
+        { core = Dict.intersect
+        , public = intersect
+        , public2 = intersect2
+        , dotdot = DDD.intersect
+        , private = intersectDotdot
+        }
+    ]
+        |> Result.Extra.combine
+        |> Result.map (List.concat >> Benchmark.describe "Dict")
 
 
 intersect : Dict comparable v -> Dict comparable v -> Dict comparable v
@@ -35,28 +50,53 @@ intersect l r =
         rlist =
             Dict.toList r
 
-        go : List ( comparable, v ) -> List ( comparable, v ) -> List ( comparable, v )
-        go lleft rleft =
+        go : Dict comparable v -> List ( comparable, v ) -> List ( comparable, v ) -> Dict comparable v
+        go acc lleft rleft =
             case lleft of
                 [] ->
-                    []
+                    acc
 
-                (( lheadKey, _ ) as lhead) :: ltail ->
+                ( lheadKey, lheadValue ) :: ltail ->
                     case rleft of
                         [] ->
-                            []
+                            acc
 
                         ( rheadKey, _ ) :: rtail ->
                             if lheadKey == rheadKey then
-                                lhead :: go ltail rtail
+                                go (Dict.insert lheadKey lheadValue acc) ltail rtail
 
                             else if lheadKey < rheadKey then
-                                go ltail rleft
+                                go acc ltail rleft
 
                             else
-                                go lleft rtail
+                                go acc lleft rtail
     in
-    Dict.fromList (go llist rlist)
+    go Dict.empty llist rlist
+
+
+intersect2 : Dict comparable v -> Dict comparable v -> Dict comparable v
+intersect2 l r =
+    let
+        rlist : List comparable
+        rlist =
+            Dict.keys r
+    in
+    Dict.foldl
+        (\lkey lvalue ( acc, queue ) ->
+            case List.Extra.dropWhile (\rkey -> rkey < lkey) queue of
+                [] ->
+                    ( acc, [] )
+
+                (qhead :: qtail) as newQueue ->
+                    if qhead == lkey then
+                        ( Dict.insert lkey lvalue acc, qtail )
+
+                    else
+                        ( acc, newQueue )
+        )
+        ( Dict.empty, rlist )
+        l
+        |> Tuple.first
 
 
 intersectDotdot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
@@ -70,28 +110,28 @@ intersectDotdot l r =
         rlist =
             DDD.toList r
 
-        go : List ( comparable, v ) -> List ( comparable, v ) -> List ( comparable, v )
-        go lleft rleft =
+        go : DDD.Dict comparable v -> List ( comparable, v ) -> List ( comparable, v ) -> DDD.Dict comparable v
+        go acc lleft rleft =
             case lleft of
                 [] ->
-                    []
+                    acc
 
-                (( lheadKey, _ ) as lhead) :: ltail ->
+                ( lheadKey, lheadValue ) :: ltail ->
                     case rleft of
                         [] ->
-                            []
+                            acc
 
                         ( rheadKey, _ ) :: rtail ->
                             if lheadKey == rheadKey then
-                                lhead :: go ltail rtail
+                                go (DDD.insert lheadKey lheadValue acc) ltail rtail
 
                             else if lheadKey < rheadKey then
-                                go ltail rleft
+                                go acc ltail rleft
 
                             else
-                                go lleft rtail
+                                go acc lleft rtail
     in
-    DDD.fromList (go llist rlist)
+    go DDD.empty llist rlist
 
 
 type alias Both k v =
@@ -103,13 +143,14 @@ compare :
     ->
         { core : Dict Int Int -> Dict Int Int -> Dict Int Int
         , public : Dict Int Int -> Dict Int Int -> Dict Int Int
+        , public2 : Dict Int Int -> Dict Int Int -> Dict Int Int
         , dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
         , private : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
         }
-    -> Benchmark
-compare label { core, public, dotdot, private } =
-    List.range 1 1
-        |> List.map
+    -> Result String (List Benchmark)
+compare label ({ core, public, public2, dotdot, private } as functions) =
+    List.range 0 3
+        |> Result.Extra.combineMap
             (\pow ->
                 let
                     cap : Int
@@ -141,15 +182,19 @@ compare label { core, public, dotdot, private } =
                     alternatives : List ( String, Both Int Int -> Both Int Int -> Bool )
                     alternatives =
                         [ ( "elm/core", \l r -> Dict.isEmpty <| core l.core r.core )
-                        , ( "using public API", \l r -> Dict.isEmpty <| public l.core r.core )
-                        , ( "elm-dot-dot", \l r -> DDD.isEmpty <| dotdot l.dotdot r.dotdot )
-                        , ( "using private API", \l r -> DDD.isEmpty <| private l.dotdot r.dotdot )
+                        , ( "my algo, using elm/core", \l r -> Dict.isEmpty <| public l.core r.core )
+                        , ( "my second algo, using elm/core", \l r -> Dict.isEmpty <| public2 l.core r.core )
+                        , ( "showell/dict-dot-dot", \l r -> DDD.isEmpty <| dotdot l.dotdot r.dotdot )
+                        , ( "my algo, using showell/dict-dot-dot", \l r -> DDD.isEmpty <| private l.dotdot r.dotdot )
                         ]
 
                     broken =
                         (core even.core odd.core /= public even.core odd.core)
                             || (core even.core all.core /= public even.core all.core)
                             || (core even.core even.core /= public even.core even.core)
+                            || (core even.core odd.core /= public2 even.core odd.core)
+                            || (core even.core all.core /= public2 even.core all.core)
+                            || (core even.core even.core /= public2 even.core even.core)
                             || (core even.core odd.core /= fromDD (dotdot even.dotdot odd.dotdot))
                             || (core even.core all.core /= fromDD (dotdot even.dotdot all.dotdot))
                             || (core even.core even.core /= fromDD (dotdot even.dotdot even.dotdot))
@@ -157,46 +202,51 @@ compare label { core, public, dotdot, private } =
                             || (core even.core all.core /= fromDD (private even.dotdot all.dotdot))
                             || (core even.core even.core /= fromDD (private even.dotdot even.dotdot))
                 in
-                Benchmark.describe
-                    (label ++ " (n = " ++ String.fromInt cap ++ ")")
-                    (if broken then
-                        [ Debug.toString
-                            { no =
-                                { core = core even.core odd.core
-                                , public = public even.core odd.core
-                                , dotdot = dotdot even.dotdot odd.dotdot
-                                , private = private even.dotdot odd.dotdot
-                                }
-                            , half =
-                                { core = core even.core all.core
-                                , public = public even.core all.core
-                                , dotdot = dotdot even.dotdot all.dotdot
-                                , private = private even.dotdot all.dotdot
-                                }
-                            , full =
-                                { core = core even.core even.core
-                                , public = public even.core even.core
-                                , dotdot = dotdot even.dotdot even.dotdot
-                                , private = private even.dotdot even.dotdot
-                                }
-                            }
-                            |> String.split "{"
-                            |> String.join "{\n"
-                            |> String.split ", "
-                            |> String.join ",\n"
-                            |> String.split "\npublic"
-                            |> String.join "\n public"
-                            |> Debug.todo
-                        ]
+                if broken then
+                    [ compToString "no" functions even odd
+                    , compToString "half" functions even all
+                    , compToString "full" functions even even
+                    ]
+                        |> String.join "\n\n"
+                        |> Err
 
-                     else
-                        [ Benchmark.Alternative.rank "no intersection" (\f -> f even odd) alternatives
-                        , Benchmark.Alternative.rank "half intersection" (\f -> f even all) alternatives
-                        , Benchmark.Alternative.rank "full intersection" (\f -> f even even) alternatives
-                        ]
-                    )
+                else
+                    [ Benchmark.Alternative.rank (label ++ "- no intersection - n = " ++ String.fromInt cap) (\f -> f even odd) alternatives
+                    , Benchmark.Alternative.rank (label ++ "- half intersection - n = " ++ String.fromInt cap) (\f -> f even all) alternatives
+                    , Benchmark.Alternative.rank (label ++ "- full intersection - n = " ++ String.fromInt cap) (\f -> f even even) alternatives
+                    ]
+                        |> Ok
             )
-        |> Benchmark.describe label
+        |> Result.map List.concat
+
+
+compToString :
+    String
+    ->
+        { core : Dict Int Int -> Dict Int Int -> Dict Int Int
+        , public : Dict Int Int -> Dict Int Int -> Dict Int Int
+        , public2 : Dict Int Int -> Dict Int Int -> Dict Int Int
+        , private : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
+        , dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
+        }
+    -> Both Int Int
+    -> Both Int Int
+    -> String
+compToString label { core, public, public2, private, dotdot } l r =
+    let
+        inner d =
+            Dict.toList d
+                |> List.map (\( k, v ) -> String.fromInt k ++ " " ++ String.fromInt v)
+                |> String.join ", "
+    in
+    [ label ++ ":"
+    , "  core: " ++ inner (core l.core r.core)
+    , "  public: " ++ inner (public l.core r.core)
+    , "  public2: " ++ inner (public2 l.core r.core)
+    , "  dotdot: " ++ inner (fromDD <| dotdot l.dotdot r.dotdot)
+    , "  private: " ++ inner (fromDD <| private l.dotdot r.dotdot)
+    ]
+        |> String.join "\n"
 
 
 fromDD : DDD.Dict comparable v -> Dict comparable v
