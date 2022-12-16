@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "codegen"
+		},
+		{
+			"path": "review"
+		},
+		{
+			"path": "benchmarks"
+		}
+	],
+	"settings": {}
+}
