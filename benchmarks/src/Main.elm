@@ -29,58 +29,43 @@ suite : Result String Benchmark
 suite =
     [ compare "intersect"
         { core = Dict.intersect
-        , public = intersect
-        , public2 = intersect2
+        , toList = intersect_toList
+        , folding = intersect_folding
         , dotdot = DDD.intersect
-        , private = intersectDotdot
+        , toList_dotdot = intersect_toList_DotDot
+        , folding_dotdot = intersect_folding_DotDot
         }
     ]
         |> Result.Extra.combine
         |> Result.map (List.concat >> Benchmark.describe "Dict")
 
 
-intersect : Dict comparable v -> Dict comparable v -> Dict comparable v
-intersect l r =
+intersect_toList : Dict comparable v -> Dict comparable v -> Dict comparable v
+intersect_toList l r =
     let
-        llist : List ( comparable, v )
-        llist =
-            Dict.toList l
-
-        rlist : List ( comparable, v )
-        rlist =
-            Dict.toList r
-
-        go : Dict comparable v -> List ( comparable, v ) -> List ( comparable, v ) -> Dict comparable v
+        go : Dict comparable v -> List ( comparable, v ) -> List comparable -> Dict comparable v
         go acc lleft rleft =
             case lleft of
                 [] ->
                     acc
 
                 ( lheadKey, lheadValue ) :: ltail ->
-                    case rleft of
+                    case List.Extra.dropWhile (\rk -> rk < lheadKey) rleft of
                         [] ->
                             acc
 
-                        ( rheadKey, _ ) :: rtail ->
+                        (rheadKey :: rtail) as rNext ->
                             if lheadKey == rheadKey then
                                 go (Dict.insert lheadKey lheadValue acc) ltail rtail
 
-                            else if lheadKey < rheadKey then
-                                go acc ltail rleft
-
                             else
-                                go acc lleft rtail
+                                go acc (List.Extra.dropWhile (\( lk, _ ) -> lk < rheadKey) ltail) rNext
     in
-    go Dict.empty llist rlist
+    go Dict.empty (Dict.toList l) (Dict.keys r)
 
 
-intersect2 : Dict comparable v -> Dict comparable v -> Dict comparable v
-intersect2 l r =
-    let
-        rlist : List comparable
-        rlist =
-            Dict.keys r
-    in
+intersect_folding : Dict comparable v -> Dict comparable v -> Dict comparable v
+intersect_folding l r =
     Dict.foldl
         (\lkey lvalue ( acc, queue ) ->
             case List.Extra.dropWhile (\rkey -> rkey < lkey) queue of
@@ -94,44 +79,53 @@ intersect2 l r =
                     else
                         ( acc, newQueue )
         )
-        ( Dict.empty, rlist )
+        ( Dict.empty, Dict.keys r )
         l
         |> Tuple.first
 
 
-intersectDotdot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
-intersectDotdot l r =
+intersect_toList_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
+intersect_toList_DotDot l r =
     let
-        llist : List ( comparable, v )
-        llist =
-            DDD.toList l
-
-        rlist : List ( comparable, v )
-        rlist =
-            DDD.toList r
-
-        go : DDD.Dict comparable v -> List ( comparable, v ) -> List ( comparable, v ) -> DDD.Dict comparable v
+        go : DDD.Dict comparable v -> List ( comparable, v ) -> List comparable -> DDD.Dict comparable v
         go acc lleft rleft =
             case lleft of
                 [] ->
                     acc
 
                 ( lheadKey, lheadValue ) :: ltail ->
-                    case rleft of
+                    case List.Extra.dropWhile (\rk -> rk < lheadKey) rleft of
                         [] ->
                             acc
 
-                        ( rheadKey, _ ) :: rtail ->
+                        (rheadKey :: rtail) as rNext ->
                             if lheadKey == rheadKey then
                                 go (DDD.insert lheadKey lheadValue acc) ltail rtail
 
-                            else if lheadKey < rheadKey then
-                                go acc ltail rleft
-
                             else
-                                go acc lleft rtail
+                                go acc (List.Extra.dropWhile (\( lk, _ ) -> lk < rheadKey) ltail) rNext
     in
-    go DDD.empty llist rlist
+    go DDD.empty (DDD.toList l) (DDD.keys r)
+
+
+intersect_folding_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
+intersect_folding_DotDot l r =
+    DDD.foldl
+        (\lkey lvalue ( acc, queue ) ->
+            case List.Extra.dropWhile (\rkey -> rkey < lkey) queue of
+                [] ->
+                    ( acc, [] )
+
+                (qhead :: qtail) as newQueue ->
+                    if qhead == lkey then
+                        ( DDD.insert lkey lvalue acc, qtail )
+
+                    else
+                        ( acc, newQueue )
+        )
+        ( DDD.empty, DDD.keys r )
+        l
+        |> Tuple.first
 
 
 type alias Both k v =
@@ -142,13 +136,14 @@ compare :
     String
     ->
         { core : Dict Int Int -> Dict Int Int -> Dict Int Int
-        , public : Dict Int Int -> Dict Int Int -> Dict Int Int
-        , public2 : Dict Int Int -> Dict Int Int -> Dict Int Int
+        , toList : Dict Int Int -> Dict Int Int -> Dict Int Int
+        , folding : Dict Int Int -> Dict Int Int -> Dict Int Int
         , dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
-        , private : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
+        , toList_dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
+        , folding_dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
         }
     -> Result String (List Benchmark)
-compare label ({ core, public, public2, dotdot, private } as functions) =
+compare label ({ core, toList, folding, dotdot, toList_dotdot, folding_dotdot } as functions) =
     List.range 0 3
         |> Result.Extra.combineMap
             (\pow ->
@@ -182,25 +177,29 @@ compare label ({ core, public, public2, dotdot, private } as functions) =
                     alternatives : List ( String, Both Int Int -> Both Int Int -> Bool )
                     alternatives =
                         [ ( "elm/core", \l r -> Dict.isEmpty <| core l.core r.core )
-                        , ( "my algo, using elm/core", \l r -> Dict.isEmpty <| public l.core r.core )
-                        , ( "my second algo, using elm/core", \l r -> Dict.isEmpty <| public2 l.core r.core )
+                        , ( "converting to lists, using elm/core", \l r -> Dict.isEmpty <| toList l.core r.core )
+                        , ( "folding, using elm/core", \l r -> Dict.isEmpty <| folding l.core r.core )
                         , ( "showell/dict-dot-dot", \l r -> DDD.isEmpty <| dotdot l.dotdot r.dotdot )
-                        , ( "my algo, using showell/dict-dot-dot", \l r -> DDD.isEmpty <| private l.dotdot r.dotdot )
+                        , ( "converting to lists, using showell/dict-dot-dot", \l r -> DDD.isEmpty <| toList_dotdot l.dotdot r.dotdot )
+                        , ( "folding, using showell/dict-dot-dot", \l r -> DDD.isEmpty <| folding_dotdot l.dotdot r.dotdot )
                         ]
 
                     broken =
-                        (core even.core odd.core /= public even.core odd.core)
-                            || (core even.core all.core /= public even.core all.core)
-                            || (core even.core even.core /= public even.core even.core)
-                            || (core even.core odd.core /= public2 even.core odd.core)
-                            || (core even.core all.core /= public2 even.core all.core)
-                            || (core even.core even.core /= public2 even.core even.core)
-                            || (core even.core odd.core /= fromDD (dotdot even.dotdot odd.dotdot))
-                            || (core even.core all.core /= fromDD (dotdot even.dotdot all.dotdot))
-                            || (core even.core even.core /= fromDD (dotdot even.dotdot even.dotdot))
-                            || (core even.core odd.core /= fromDD (private even.dotdot odd.dotdot))
-                            || (core even.core all.core /= fromDD (private even.dotdot all.dotdot))
-                            || (core even.core even.core /= fromDD (private even.dotdot even.dotdot))
+                        check toList
+                            || check folding
+                            || checkDD dotdot
+                            || checkDD toList_dotdot
+                            || checkDD folding_dotdot
+
+                    check method =
+                        (core even.core odd.core /= method even.core odd.core)
+                            || (core even.core all.core /= method even.core all.core)
+                            || (core even.core even.core /= method even.core even.core)
+
+                    checkDD method =
+                        (core even.core odd.core /= fromDD (method even.dotdot odd.dotdot))
+                            || (core even.core all.core /= fromDD (method even.dotdot all.dotdot))
+                            || (core even.core even.core /= fromDD (method even.dotdot even.dotdot))
                 in
                 if broken then
                     [ compToString "no" functions even odd
@@ -224,15 +223,16 @@ compToString :
     String
     ->
         { core : Dict Int Int -> Dict Int Int -> Dict Int Int
-        , public : Dict Int Int -> Dict Int Int -> Dict Int Int
-        , public2 : Dict Int Int -> Dict Int Int -> Dict Int Int
-        , private : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
+        , toList : Dict Int Int -> Dict Int Int -> Dict Int Int
+        , folding : Dict Int Int -> Dict Int Int -> Dict Int Int
         , dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
+        , toList_dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
+        , folding_dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
         }
     -> Both Int Int
     -> Both Int Int
     -> String
-compToString label { core, public, public2, private, dotdot } l r =
+compToString label { core, toList, folding, toList_dotdot, dotdot, folding_dotdot } l r =
     let
         inner d =
             Dict.toList d
@@ -241,10 +241,11 @@ compToString label { core, public, public2, private, dotdot } l r =
     in
     [ label ++ ":"
     , "  core: " ++ inner (core l.core r.core)
-    , "  public: " ++ inner (public l.core r.core)
-    , "  public2: " ++ inner (public2 l.core r.core)
+    , "  toList: " ++ inner (toList l.core r.core)
+    , "  folding: " ++ inner (folding l.core r.core)
     , "  dotdot: " ++ inner (fromDD <| dotdot l.dotdot r.dotdot)
-    , "  private: " ++ inner (fromDD <| private l.dotdot r.dotdot)
+    , "  toList_dotdot: " ++ inner (fromDD <| toList_dotdot l.dotdot r.dotdot)
+    , "  folding_dotdot: " ++ inner (fromDD <| folding_dotdot l.dotdot r.dotdot)
     ]
         |> String.join "\n"
 
