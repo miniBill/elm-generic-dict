@@ -192,9 +192,11 @@ button attrs config =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     let
+        noCmd : Model -> ( Model, Cmd Msg )
         noCmd m =
             ( m, Cmd.none )
 
+        withCmd : Cmd Msg -> Model -> ( Model, Cmd Msg )
         withCmd c m =
             ( m, c )
     in

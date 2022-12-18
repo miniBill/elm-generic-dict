@@ -104,6 +104,7 @@ yAxis max =
 column : Float -> BandScale Int -> Color -> Dict Int BoxStats -> List (Svg msg)
 column max scale color statsDict =
     let
+        stats : List ( Int, BoxStats )
         stats =
             Dict.toList statsDict
 
@@ -128,16 +129,18 @@ column max scale color statsDict =
             List.map tranfromToAreaData model
                 |> Shape.area Shape.monotoneInXCurve
 
+        qtColor : Color
         qtColor =
             color
                 |> Color.toRgba
-                |> (\rgba -> { rgba | alpha = 0.75 })
+                |> (\rgba -> { rgba | alpha = 0.5 })
                 |> Color.fromRgba
 
+        bgColor : Color
         bgColor =
             color
                 |> Color.toRgba
-                |> (\rgba -> { rgba | alpha = 0.5 })
+                |> (\rgba -> { rgba | alpha = 0.25 })
                 |> Color.fromRgba
     in
     [ Path.element (area stats)
@@ -194,6 +197,7 @@ gradient =
 view : Data -> Svg msg
 view model =
     let
+        max : Float
         max =
             model
                 |> List.concatMap (\( _, times ) -> Dict.values times)
