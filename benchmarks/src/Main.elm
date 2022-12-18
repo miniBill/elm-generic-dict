@@ -1,255 +1,439 @@
-module Main exposing (main)
+module Main exposing (Flags, Model, Msg, main)
 
-import Benchmark exposing (Benchmark)
-import Benchmark.Alternative
-import Benchmark.Runner.Alternative
+import Benchmark.LowLevel exposing (Operation)
 import Browser
+import Color exposing (Color)
 import Dict exposing (Dict)
 import DictDotDot as DDD
-import Html
+import Element exposing (Attribute, Element, centerY, column, el, height, padding, px, row, shrink, spacing, table, text, width)
+import Element.Background as Background
+import Element.Border as Border
+import Element.Font as Font
+import Element.Input as Input
+import Intersect
+import LinePlot exposing (BoxStats)
 import List.Extra
+import Process
+import Random
 import Result.Extra
+import Task
 
 
-main : Benchmark.Runner.Alternative.Program
+type alias Flags =
+    ()
+
+
+type alias Model =
+    { times : Dict String ( Color, Dict Int BoxStats )
+    , errors : List String
+    , running : Bool
+    }
+
+
+type alias Param =
+    { key : String
+    , color : Color
+    , size : Int
+    , queue : List ( String, Color )
+    }
+
+
+type Msg
+    = Run
+    | Completed Param (Result String BoxStats)
+
+
+main : Program Flags Model Msg
 main =
-    case suite of
-        Ok s ->
-            Benchmark.Runner.Alternative.program s
+    Browser.element
+        { init = init
+        , view = \model -> Element.layout [] (view model)
+        , update = update
+        , subscriptions = subscriptions
+        }
 
-        Err e ->
-            Browser.sandbox
-                { init = { suite = Benchmark.describe "" [] }
-                , view = \_ -> Html.pre [] [ Html.text e ]
-                , update = \_ model -> model
+
+init : Flags -> ( Model, Cmd Msg )
+init _ =
+    ( { times = Dict.empty
+      , running = False
+      , errors = []
+      }
+    , Cmd.none
+    )
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    Sub.none
+
+
+view : Model -> Element Msg
+view model =
+    column
+        [ padding 10
+        , spacing 10
+        ]
+        [ button [] <|
+            if model.running then
+                { onPress = Nothing
+                , label = text <| "Running"
                 }
 
+            else
+                { onPress = Just Run
+                , label = text <| "Run"
+                }
+        , if Dict.isEmpty model.times then
+            Element.none
 
-suite : Result String Benchmark
-suite =
-    [ compare "intersect"
-        { core = Dict.intersect
-        , toList = intersect_toList
-        , folding = intersect_folding
-        , dotdot = DDD.intersect
-        , toList_dotdot = intersect_toList_DotDot
-        , folding_dotdot = intersect_folding_DotDot
+          else
+            viewTable model
+        , if Dict.isEmpty model.times then
+            Element.none
+
+          else
+            model.times
+                |> Dict.values
+                |> LinePlot.view
+                |> Element.html
+                |> el []
+        , model.errors
+            |> List.map (\err -> el [] <| text err)
+            |> column [ spacing 10 ]
+        ]
+
+
+viewTable : Model -> Element Msg
+viewTable model =
+    let
+        data : List ( Int, Dict String BoxStats )
+        data =
+            model.times
+                |> Dict.toList
+                |> List.concatMap (\( key, ( _, dict ) ) -> List.map (\( size, stats ) -> ( size, key, stats )) (Dict.toList dict))
+                |> List.Extra.gatherEqualsBy (\( size, _, _ ) -> size)
+                |> List.map
+                    (\( ( size, _, _ ) as head, tail ) ->
+                        ( size
+                        , (head :: tail)
+                            |> List.map (\( _, key, stats ) -> ( key, stats ))
+                            |> Dict.fromList
+                        )
+                    )
+
+        keys : List ( String, Color )
+        keys =
+            model.times
+                |> Dict.toList
+                |> List.map (\( key, ( color, _ ) ) -> ( key, color ))
+
+        header : String -> Maybe Color -> Element msg
+        header label color =
+            row [ Font.bold, spacing 1 ]
+                [ case color of
+                    Nothing ->
+                        Element.none
+
+                    Just c ->
+                        let
+                            rgba : { red : Float, green : Float, blue : Float, alpha : Float }
+                            rgba =
+                                Color.toRgba c
+                        in
+                        el
+                            [ Background.color <| Element.rgb rgba.red rgba.green rgba.blue
+                            , width <| px 10
+                            , height <| px 10
+                            , centerY
+                            ]
+                            Element.none
+                , text label
+                ]
+    in
+    table [ spacing 10 ]
+        { data = data
+        , columns =
+            { header = header "key" Nothing
+            , view = \( size, _ ) -> text <| String.fromInt size
+            , width = shrink
+            }
+                :: List.map
+                    (\( key, color ) ->
+                        { header = header key (Just color)
+                        , view =
+                            \( _, vals ) ->
+                                case Dict.get key vals of
+                                    Just stats ->
+                                        text <| formatFloat stats.min ++ "; " ++ formatFloat stats.median ++ "; " ++ formatFloat stats.max
+
+                                    Nothing ->
+                                        Element.none
+                        , width = shrink
+                        }
+                    )
+                    keys
         }
+
+
+formatFloat : Float -> String
+formatFloat f =
+    round (f * 100)
+        |> toFloat
+        |> (\r -> r / 100)
+        |> String.fromFloat
+
+
+button : List (Attribute msg) -> { onPress : Maybe msg, label : Element msg } -> Element msg
+button attrs config =
+    Input.button (Border.width 1 :: padding 10 :: attrs) config
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    let
+        noCmd m =
+            ( m, Cmd.none )
+
+        withCmd c m =
+            ( m, c )
+    in
+    case msg of
+        Run ->
+            { model | running = True }
+                |> withCmd
+                    (run
+                        { key = "intersect core"
+                        , color = Color.red
+                        , size = 100
+                        , queue =
+                            [ ( "intersect toList", Color.green )
+                            , ( "intersect folding", Color.blue )
+                            , ( "intersect dotdot", Color.darkRed )
+                            , ( "intersect toList_dotdot", Color.darkGreen )
+                            , ( "intersect folding_dotdot", Color.darkBlue )
+                            ]
+                        }
+                    )
+
+        Completed param (Ok times) ->
+            let
+                continue : Bool
+                continue =
+                    param.size < 1000
+
+                newTimes : Dict String ( Color, Dict Int BoxStats )
+                newTimes =
+                    Dict.update
+                        param.key
+                        (\v ->
+                            Just ( param.color, Dict.insert param.size times (Maybe.withDefault Dict.empty <| Maybe.map Tuple.second v) )
+                        )
+                        model.times
+            in
+            if continue then
+                { model
+                    | times = newTimes
+                }
+                    |> withCmd
+                        (run
+                            { param | size = param.size + 100 }
+                        )
+
+            else
+                case param.queue of
+                    [] ->
+                        { model
+                            | running = False
+                            , times = newTimes
+                        }
+                            |> noCmd
+
+                    ( qhead, color ) :: qtail ->
+                        { model | times = newTimes }
+                            |> withCmd
+                                (run
+                                    { key = qhead
+                                    , color = color
+                                    , size = 100
+                                    , queue = qtail
+                                    }
+                                )
+
+        Completed _ (Err err) ->
+            { model
+                | running = False
+                , errors = err :: model.errors
+            }
+                |> noCmd
+
+
+run : Param -> Cmd Msg
+run param =
+    case operations |> Result.toMaybe |> Maybe.andThen (Dict.get param.key) of
+        Nothing ->
+            Task.succeed (Err "Key not found")
+                |> Task.perform (Completed param)
+
+        Just f ->
+            let
+                operation : Operation
+                operation =
+                    f param.size
+            in
+            Process.sleep 0
+                |> Task.andThen (\_ -> Benchmark.LowLevel.warmup operation)
+                |> Task.andThen (\_ -> Process.sleep 0)
+                |> Task.andThen (\_ -> Benchmark.LowLevel.findSampleSize operation)
+                |> Task.andThen (\sampleSize -> Process.sleep 0 |> Task.map (\_ -> sampleSize))
+                |> Task.andThen
+                    (\sampleSize ->
+                        let
+                            batchSize : Int
+                            batchSize =
+                                4
+                        in
+                        List.range 0 (max 1 <| (sampleSize + 2) // batchSize)
+                            |> List.map
+                                (\_ ->
+                                    Benchmark.LowLevel.sample batchSize operation
+                                        |> Task.map Just
+                                )
+                            |> intersperseInTotal 20 (Process.sleep 0 |> Task.map (\_ -> Nothing))
+                            |> Task.sequence
+                            |> Task.map (List.filterMap identity >> LinePlot.computeStatistics)
+                    )
+                |> Task.mapError Debug.toString
+                |> Task.attempt (Completed param)
+
+
+intersperseInTotal : Int -> a -> List a -> List a
+intersperseInTotal count elem list =
+    let
+        skip : Int
+        skip =
+            max 1 <| List.length list // (count + 1)
+
+        go : Int -> List a -> List a
+        go cnt left =
+            case left of
+                [] ->
+                    []
+
+                head :: tail ->
+                    if cnt == 0 then
+                        elem :: go skip left
+
+                    else
+                        head :: go (cnt - 1) tail
+    in
+    go skip list
+
+
+generate : Int -> Both Int Int
+generate size =
+    let
+        generator : Random.Generator (Both Int Int)
+        generator =
+            Random.int 0 (2 * size)
+                |> Random.map (\t -> ( t, t ))
+                |> Random.list size
+                |> Random.map (\lst -> { core = Dict.fromList lst, dotdot = DDD.fromList lst })
+    in
+    Random.step generator (Random.initialSeed size)
+        |> Tuple.first
+
+
+operations : Result Error (Dict String (Int -> Operation))
+operations =
+    [ intersectCore "core" Dict.intersect
+    , intersectCore "toList" Intersect.toList
+    , intersectCore "folding" Intersect.folding
+    , intersectDotDot "dotdot" DDD.intersect
+    , intersectDotDot "toList_dotdot" Intersect.toList_DotDot
+    , intersectDotDot "folding_dotdot" Intersect.folding_DotDot
     ]
         |> Result.Extra.combine
-        |> Result.map (List.concat >> Benchmark.describe "Dict")
+        |> Result.map Dict.fromList
 
 
-intersect_toList : Dict comparable v -> Dict comparable v -> Dict comparable v
-intersect_toList l r =
+type alias Error =
+    { label : String
+    , left : Dict Int Int
+    , right : Dict Int Int
+    , expected : List ( Int, Int )
+    , actual : List ( Int, Int )
+    }
+
+
+intersectCore : String -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error ( String, Int -> Operation )
+intersectCore label =
+    intersect label .core Dict.toList
+
+
+intersectDotDot : String -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error ( String, Int -> Operation )
+intersectDotDot label =
+    intersect label .dotdot DDD.toList
+
+
+intersect :
+    String
+    -> (Both Int Int -> dict)
+    -> (dict -> List ( Int, Int ))
+    -> (dict -> dict -> dict)
+    -> Result Error ( String, Int -> Operation )
+intersect label =
+    compare Dict.intersect ("intersect " ++ label)
+
+
+compare :
+    (Dict Int Int -> Dict Int Int -> Dict Int Int)
+    -> String
+    -> (Both Int Int -> dict)
+    -> (dict -> List ( Int, Int ))
+    -> (dict -> dict -> dict)
+    -> Result Error ( String, Int -> Operation )
+compare core label selector toList op =
     let
-        go : Dict comparable v -> List ( comparable, v ) -> List comparable -> Dict comparable v
-        go acc lleft rleft =
-            case lleft of
-                [] ->
-                    acc
+        ltest : Both Int Int
+        ltest =
+            generate 150
 
-                ( lheadKey, lheadValue ) :: ltail ->
-                    case List.Extra.dropWhile (\rk -> rk < lheadKey) rleft of
-                        [] ->
-                            acc
+        rtest : Both Int Int
+        rtest =
+            generate 151
 
-                        (rheadKey :: rtail) as rNext ->
-                            if lheadKey == rheadKey then
-                                go (Dict.insert lheadKey lheadValue acc) ltail rtail
+        expected : List ( Int, Int )
+        expected =
+            core ltest.core rtest.core |> Dict.toList
 
-                            else
-                                go acc (List.Extra.dropWhile (\( lk, _ ) -> lk < rheadKey) ltail) rNext
+        actual : List ( Int, Int )
+        actual =
+            op (selector ltest) (selector rtest) |> toList
     in
-    go Dict.empty (Dict.toList l) (Dict.keys r)
+    if expected == actual then
+        Ok
+            ( label
+            , \size ->
+                let
+                    ls =
+                        selector (generate size)
 
+                    rs =
+                        selector (generate (size + 1))
+                in
+                Benchmark.LowLevel.operation (\_ -> op ls rs)
+            )
 
-intersect_folding : Dict comparable v -> Dict comparable v -> Dict comparable v
-intersect_folding l r =
-    Dict.foldl
-        (\lkey lvalue ( acc, queue ) ->
-            case List.Extra.dropWhile (\rkey -> rkey < lkey) queue of
-                [] ->
-                    ( acc, [] )
-
-                (qhead :: qtail) as newQueue ->
-                    if qhead == lkey then
-                        ( Dict.insert lkey lvalue acc, qtail )
-
-                    else
-                        ( acc, newQueue )
-        )
-        ( Dict.empty, Dict.keys r )
-        l
-        |> Tuple.first
-
-
-intersect_toList_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
-intersect_toList_DotDot l r =
-    let
-        go : DDD.Dict comparable v -> List ( comparable, v ) -> List comparable -> DDD.Dict comparable v
-        go acc lleft rleft =
-            case lleft of
-                [] ->
-                    acc
-
-                ( lheadKey, lheadValue ) :: ltail ->
-                    case List.Extra.dropWhile (\rk -> rk < lheadKey) rleft of
-                        [] ->
-                            acc
-
-                        (rheadKey :: rtail) as rNext ->
-                            if lheadKey == rheadKey then
-                                go (DDD.insert lheadKey lheadValue acc) ltail rtail
-
-                            else
-                                go acc (List.Extra.dropWhile (\( lk, _ ) -> lk < rheadKey) ltail) rNext
-    in
-    go DDD.empty (DDD.toList l) (DDD.keys r)
-
-
-intersect_folding_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
-intersect_folding_DotDot l r =
-    DDD.foldl
-        (\lkey lvalue ( acc, queue ) ->
-            case List.Extra.dropWhile (\rkey -> rkey < lkey) queue of
-                [] ->
-                    ( acc, [] )
-
-                (qhead :: qtail) as newQueue ->
-                    if qhead == lkey then
-                        ( DDD.insert lkey lvalue acc, qtail )
-
-                    else
-                        ( acc, newQueue )
-        )
-        ( DDD.empty, DDD.keys r )
-        l
-        |> Tuple.first
+    else
+        Err
+            { label = label
+            , left = ltest.core
+            , right = rtest.core
+            , expected = expected
+            , actual = actual
+            }
 
 
 type alias Both k v =
     { core : Dict k v, dotdot : DDD.Dict k v }
-
-
-compare :
-    String
-    ->
-        { core : Dict Int Int -> Dict Int Int -> Dict Int Int
-        , toList : Dict Int Int -> Dict Int Int -> Dict Int Int
-        , folding : Dict Int Int -> Dict Int Int -> Dict Int Int
-        , dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
-        , toList_dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
-        , folding_dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
-        }
-    -> Result String (List Benchmark)
-compare label ({ core, toList, folding, dotdot, toList_dotdot, folding_dotdot } as functions) =
-    List.range 0 3
-        |> Result.Extra.combineMap
-            (\pow ->
-                let
-                    cap : Int
-                    cap =
-                        10 ^ pow
-
-                    toDict : (Int -> Bool) -> Both Int Int
-                    toDict f =
-                        let
-                            list =
-                                List.map (\t -> ( t, t )) <| List.filter f (List.range 1 cap)
-                        in
-                        { core = Dict.fromList list
-                        , dotdot = DDD.fromList list
-                        }
-
-                    all : Both Int Int
-                    all =
-                        toDict (\_ -> True)
-
-                    even : Both Int Int
-                    even =
-                        toDict (\n -> modBy 2 n == 0)
-
-                    odd : Both Int Int
-                    odd =
-                        toDict (\n -> modBy 2 n == 1)
-
-                    alternatives : List ( String, Both Int Int -> Both Int Int -> Bool )
-                    alternatives =
-                        [ ( "elm/core", \l r -> Dict.isEmpty <| core l.core r.core )
-                        , ( "converting to lists, using elm/core", \l r -> Dict.isEmpty <| toList l.core r.core )
-                        , ( "folding, using elm/core", \l r -> Dict.isEmpty <| folding l.core r.core )
-                        , ( "showell/dict-dot-dot", \l r -> DDD.isEmpty <| dotdot l.dotdot r.dotdot )
-                        , ( "converting to lists, using showell/dict-dot-dot", \l r -> DDD.isEmpty <| toList_dotdot l.dotdot r.dotdot )
-                        , ( "folding, using showell/dict-dot-dot", \l r -> DDD.isEmpty <| folding_dotdot l.dotdot r.dotdot )
-                        ]
-
-                    broken =
-                        check toList
-                            || check folding
-                            || checkDD dotdot
-                            || checkDD toList_dotdot
-                            || checkDD folding_dotdot
-
-                    check method =
-                        (core even.core odd.core /= method even.core odd.core)
-                            || (core even.core all.core /= method even.core all.core)
-                            || (core even.core even.core /= method even.core even.core)
-
-                    checkDD method =
-                        (core even.core odd.core /= fromDD (method even.dotdot odd.dotdot))
-                            || (core even.core all.core /= fromDD (method even.dotdot all.dotdot))
-                            || (core even.core even.core /= fromDD (method even.dotdot even.dotdot))
-                in
-                if broken then
-                    [ compToString "no" functions even odd
-                    , compToString "half" functions even all
-                    , compToString "full" functions even even
-                    ]
-                        |> String.join "\n\n"
-                        |> Err
-
-                else
-                    [ Benchmark.Alternative.rank (label ++ "- no intersection - n = " ++ String.fromInt cap) (\f -> f even odd) alternatives
-                    , Benchmark.Alternative.rank (label ++ "- half intersection - n = " ++ String.fromInt cap) (\f -> f even all) alternatives
-                    , Benchmark.Alternative.rank (label ++ "- full intersection - n = " ++ String.fromInt cap) (\f -> f even even) alternatives
-                    ]
-                        |> Ok
-            )
-        |> Result.map List.concat
-
-
-compToString :
-    String
-    ->
-        { core : Dict Int Int -> Dict Int Int -> Dict Int Int
-        , toList : Dict Int Int -> Dict Int Int -> Dict Int Int
-        , folding : Dict Int Int -> Dict Int Int -> Dict Int Int
-        , dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
-        , toList_dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
-        , folding_dotdot : DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int
-        }
-    -> Both Int Int
-    -> Both Int Int
-    -> String
-compToString label { core, toList, folding, toList_dotdot, dotdot, folding_dotdot } l r =
-    let
-        inner d =
-            Dict.toList d
-                |> List.map (\( k, v ) -> String.fromInt k ++ " " ++ String.fromInt v)
-                |> String.join ", "
-    in
-    [ label ++ ":"
-    , "  core: " ++ inner (core l.core r.core)
-    , "  toList: " ++ inner (toList l.core r.core)
-    , "  folding: " ++ inner (folding l.core r.core)
-    , "  dotdot: " ++ inner (fromDD <| dotdot l.dotdot r.dotdot)
-    , "  toList_dotdot: " ++ inner (fromDD <| toList_dotdot l.dotdot r.dotdot)
-    , "  folding_dotdot: " ++ inner (fromDD <| folding_dotdot l.dotdot r.dotdot)
-    ]
-        |> String.join "\n"
-
-
-fromDD : DDD.Dict comparable v -> Dict comparable v
-fromDD =
-    DDD.toList >> Dict.fromList
