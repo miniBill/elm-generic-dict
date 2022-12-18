@@ -4,14 +4,14 @@ import Axis
 import Color exposing (Color)
 import Dict exposing (Dict)
 import Html.Attributes
+import List.Extra
 import Path exposing (Path)
-import Scale exposing (BandScale, ContinuousScale, defaultBandConfig)
-import Set
+import Scale exposing (ContinuousScale)
 import Shape
 import Statistics exposing (quantile)
-import TypedSvg exposing (defs, g, line, linearGradient, stop, svg)
+import TypedSvg exposing (circle, defs, g, line, linearGradient, stop, svg)
 import TypedSvg.Attributes exposing (class, fill, id, offset, opacity, stopColor, stroke, transform, viewBox)
-import TypedSvg.Attributes.InPx exposing (strokeWidth, x1, x2, y1, y2)
+import TypedSvg.Attributes.InPx exposing (cx, cy, r, strokeWidth, x1, x2, y1, y2)
 import TypedSvg.Core exposing (Svg)
 import TypedSvg.Types exposing (Length(..), Opacity(..), Paint(..), Transform(..))
 
@@ -39,13 +39,13 @@ padding =
     30
 
 
-xScale : Data -> BandScale Int
+xScale : Data -> ContinuousScale Float
 xScale model =
     model
         |> List.concatMap (\( _, points ) -> Dict.keys points)
-        |> Set.fromList
-        |> Set.toList
-        |> Scale.band { defaultBandConfig | paddingInner = 0.1, paddingOuter = 0.2 } ( 0, w - 2 * padding )
+        |> List.maximum
+        |> Maybe.withDefault 200
+        |> (\mx -> Scale.linear ( 0, w - 2 * padding ) ( 100, toFloat mx ))
 
 
 yScale : Float -> ContinuousScale Float
@@ -59,6 +59,7 @@ type alias BoxStats =
     , thirdQuartile : Float
     , max : Float
     , min : Float
+    , outliers : List Float
     }
 
 
@@ -82,18 +83,44 @@ computeStatistics yList =
         thirdQuartile : Float
         thirdQuartile =
             Maybe.withDefault 0 <| quantile 0.75 sortedYList
+
+        interQuartileRange : Float
+        interQuartileRange =
+            thirdQuartile - firstQuartile
+
+        whiskerTopMax : Float
+        whiskerTopMax =
+            thirdQuartile + 1.5 * interQuartileRange
+
+        whiskerBottomMin : Float
+        whiskerBottomMin =
+            firstQuartile - (1.5 * interQuartileRange)
     in
     { firstQuartile = firstQuartile
     , median = Statistics.quantile 0.5 sortedYList |> Maybe.withDefault 0
     , thirdQuartile = thirdQuartile
-    , max = Maybe.withDefault 0 (List.head reverseSortedYList)
-    , min = Maybe.withDefault 0 (List.head sortedYList)
+    , max = computeWhiskerMax (<=) (Maybe.withDefault 0 (List.head reverseSortedYList)) whiskerTopMax reverseSortedYList
+    , min = computeWhiskerMax (>=) (Maybe.withDefault 0 (List.head sortedYList)) whiskerBottomMin sortedYList
+    , outliers =
+        List.Extra.takeWhile (\y -> y < whiskerBottomMin) sortedYList
+            ++ List.Extra.takeWhile (\y -> y > whiskerTopMax) reverseSortedYList
     }
+
+
+{-| The whiskers should be either 1.5 the interquantile range or the highest datum, whichever is lowest.
+-}
+computeWhiskerMax : (number -> number -> Bool) -> number -> number -> List number -> number
+computeWhiskerMax cmp dataMax whiskerMax sortedData =
+    if cmp whiskerMax dataMax then
+        Maybe.withDefault 0 <| List.head <| List.Extra.dropWhile (cmp whiskerMax) sortedData
+
+    else
+        dataMax
 
 
 xAxis : Data -> Svg msg
 xAxis model =
-    Axis.bottom [] (Scale.toRenderable String.fromInt (xScale model))
+    Axis.bottom [] (xScale model)
 
 
 yAxis : Float -> Svg msg
@@ -101,7 +128,7 @@ yAxis max =
     Axis.left [ Axis.tickCount 9 ] (yScale max)
 
 
-column : Float -> BandScale Int -> Color -> Dict Int BoxStats -> List (Svg msg)
+column : Float -> ContinuousScale Float -> Color -> Dict Int BoxStats -> List (Svg msg)
 column max scale color statsDict =
     let
         stats : List ( Int, BoxStats )
@@ -110,13 +137,13 @@ column max scale color statsDict =
 
         transformToLineData : (BoxStats -> Float) -> ( Int, BoxStats ) -> Maybe ( Float, Float )
         transformToLineData selector ( x, y ) =
-            Just ( Scale.convert scale x, Scale.convert (yScale max) (selector y) )
+            Just ( Scale.convert scale (toFloat x), Scale.convert (yScale max) (selector y) )
 
         tranfromToAreaData : ( Int, BoxStats ) -> Maybe ( ( Float, Float ), ( Float, Float ) )
         tranfromToAreaData ( x, y ) =
             Just
-                ( ( Scale.convert scale x, Scale.convert (yScale max) y.min )
-                , ( Scale.convert scale x, Scale.convert (yScale max) y.max )
+                ( ( Scale.convert scale (toFloat x), Scale.convert (yScale max) y.min )
+                , ( Scale.convert scale (toFloat x), Scale.convert (yScale max) y.max )
                 )
 
         line : (BoxStats -> Float) -> List ( Int, BoxStats ) -> Path
@@ -142,6 +169,23 @@ column max scale color statsDict =
                 |> Color.toRgba
                 |> (\rgba -> { rgba | alpha = 0.25 })
                 |> Color.fromRgba
+
+        outlierCircle : Float -> Float -> Svg msg
+        outlierCircle x y =
+            circle
+                [ cx x
+                , cy y
+                , r 2
+                , fill <| Paint color
+                , stroke <| PaintNone
+                , opacity <| Opacity 0.5
+                ]
+                []
+
+        outliers : List (Svg msg)
+        outliers =
+            stats
+                |> List.concatMap (\( size, ss ) -> List.map (Scale.convert (yScale max) >> outlierCircle (Scale.convert scale (toFloat size))) ss.outliers)
     in
     [ Path.element (area stats)
         [ stroke <| Paint color
@@ -164,6 +208,7 @@ column max scale color statsDict =
         , fill PaintNone
         ]
     ]
+        ++ outliers
 
 
 yGridLine : Float -> Int -> Float -> Svg msg
