@@ -1,5 +1,5 @@
 {
-  "name": "REPLACEME-AUTHOR-SLASH-REPO",
+  "name": "elm-generic-dict",
   "version": "0.0.1",
   "description": "REPLACEME",
   "devDependencies": {
@@ -13,6 +13,6 @@
     "test": "elm-verify-examples --run-tests && elm-test",
     "postinstall": "elm-tooling install"
   },
-  "author": "REPLACEME",
+  "author": "miniBill",
   "license": "BSD-3-Clause"
 }
