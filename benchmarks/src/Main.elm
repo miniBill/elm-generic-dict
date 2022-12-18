@@ -305,7 +305,15 @@ run param =
                             |> Task.sequence
                             |> Task.map (List.filterMap identity >> LinePlot.computeStatistics)
                     )
-                |> Task.mapError Debug.toString
+                |> Task.mapError
+                    (\e ->
+                        case e of
+                            Benchmark.LowLevel.StackOverflow ->
+                                "Stack overflow"
+
+                            Benchmark.LowLevel.UnknownError msg ->
+                                msg
+                    )
                 |> Task.attempt (Completed param)
 
 
@@ -418,9 +426,11 @@ compare core label selector toList op =
             ( label
             , \size ->
                 let
+                    ls : dict
                     ls =
                         selector (generate size)
 
+                    rs : dict
                     rs =
                         selector (generate (size + 1))
                 in
