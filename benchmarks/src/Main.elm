@@ -207,7 +207,7 @@ update msg model =
                     (run
                         { key = "intersect core"
                         , color = Color.red
-                        , size = 100
+                        , size = initialSize
                         , queue =
                             [ ( "intersect toList", Color.green )
                             , ( "intersect folding", Color.blue )
@@ -222,7 +222,7 @@ update msg model =
             let
                 continue : Bool
                 continue =
-                    param.size < 1000
+                    param.size < maxSize
 
                 newTimes : Dict String ( Color, Dict Int BoxStats )
                 newTimes =
@@ -239,7 +239,7 @@ update msg model =
                 }
                     |> withCmd
                         (run
-                            { param | size = param.size + 100 }
+                            { param | size = incrementSize param.size }
                         )
 
             else
@@ -257,7 +257,7 @@ update msg model =
                                 (run
                                     { key = qhead
                                     , color = color
-                                    , size = 100
+                                    , size = initialSize
                                     , queue = qtail
                                     }
                                 )
@@ -268,6 +268,21 @@ update msg model =
                 , errors = err :: model.errors
             }
                 |> noCmd
+
+
+initialSize : Int
+initialSize =
+    100
+
+
+maxSize : Int
+maxSize =
+    10000
+
+
+incrementSize : Int -> Int
+incrementSize size =
+    size * 3 // 2
 
 
 run : Param -> Cmd Msg
