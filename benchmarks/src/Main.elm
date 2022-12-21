@@ -154,7 +154,7 @@ viewTable model =
     table [ spacing 10 ]
         { data = data
         , columns =
-            { header = header "key" Nothing
+            { header = header "size" Nothing
             , view = \( size, _ ) -> text <| String.fromInt size
             , width = shrink
             }
