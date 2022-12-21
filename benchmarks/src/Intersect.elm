@@ -1,4 +1,4 @@
-module Intersect exposing (folding, folding_DotDot, toList, toList_DotDot)
+module Intersect exposing (folding, folding_DotDot, recursion_DotDot, toList, toList_DotDot)
 
 import Dict exposing (Dict)
 import DictDotDot as DDD
@@ -90,4 +90,54 @@ folding_DotDot l r =
         )
         ( DDD.empty, DDD.keys r )
         l
+        |> Tuple.first
+
+
+recursion_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
+recursion_DotDot l r =
+    let
+        rkeys : List comparable
+        rkeys =
+            DDD.keys r
+
+        go : ( DDD.Dict comparable v, List comparable ) -> DDD.Dict comparable v -> ( DDD.Dict comparable v, List comparable )
+        go (( dacc, rleft ) as acc) lnode =
+            case lnode of
+                DDD.RBEmpty_elm_builtin ->
+                    acc
+
+                DDD.RBBlackMissing_elm_builtin c ->
+                    go acc c
+
+                DDD.RBNode_elm_builtin _ lkey lvalue childLT childGT ->
+                    case rleft of
+                        [] ->
+                            acc
+
+                        rhead :: rtail ->
+                            if rhead > lkey then
+                                -- We can skip the left tree and this node
+                                go acc childGT
+
+                            else if rhead == lkey then
+                                -- We can skip the left tree, and insert this node
+                                go ( DDD.insert lkey lvalue dacc, rtail ) childGT
+
+                            else
+                                let
+                                    (( daccAL, rleftAL ) as afterLeft) =
+                                        go acc childLT
+                                in
+                                case List.Extra.dropWhile (\rkey -> rkey < lkey) rleftAL of
+                                    [] ->
+                                        afterLeft
+
+                                    rheadAL :: rtailAL ->
+                                        if rheadAL == lkey then
+                                            go ( DDD.insert lkey lvalue daccAL, rtailAL ) childGT
+
+                                        else
+                                            go afterLeft childGT
+    in
+    go ( DDD.empty, rkeys ) l
         |> Tuple.first

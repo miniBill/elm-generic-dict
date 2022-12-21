@@ -214,6 +214,7 @@ update msg model =
                             , ( "intersect dotdot", Color.darkRed )
                             , ( "intersect toList_dotdot", Color.darkGreen )
                             , ( "intersect folding_dotdot", Color.darkBlue )
+                            , ( "intersect recursion_DotDot", Color.darkYellow )
                             ]
                         }
                     )
@@ -377,6 +378,7 @@ operations =
     , intersectDotDot "dotdot" DDD.intersect
     , intersectDotDot "toList_dotdot" Intersect.toList_DotDot
     , intersectDotDot "folding_dotdot" Intersect.folding_DotDot
+    , intersectDotDot "recursion_dotdot" Intersect.recursion_DotDot
     ]
         |> Result.Extra.combine
         |> Result.map Dict.fromList
