@@ -278,7 +278,7 @@ initialSize =
 
 maxSize : Int
 maxSize =
-    10000
+    2000
 
 
 incrementSize : Int -> Int
