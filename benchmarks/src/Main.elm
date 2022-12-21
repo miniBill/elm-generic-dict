@@ -33,8 +33,9 @@ type alias Model =
 type alias Param =
     { key : String
     , color : Color
+    , op : Int -> Operation
     , size : Int
-    , queue : List ( String, Color )
+    , queue : List ( String, ( Color, Int -> Operation ) )
     }
 
 
@@ -204,19 +205,22 @@ update msg model =
         Run ->
             { model | running = True }
                 |> withCmd
-                    (run
-                        { key = "intersect core"
-                        , color = Color.red
-                        , size = initialSize
-                        , queue =
-                            [ ( "intersect toList", Color.green )
-                            , ( "intersect folding", Color.blue )
-                            , ( "intersect dotdot", Color.darkRed )
-                            , ( "intersect toList_dotdot", Color.darkGreen )
-                            , ( "intersect folding_dotdot", Color.darkBlue )
-                            , ( "intersect recursion_DotDot", Color.darkYellow )
-                            ]
-                        }
+                    (case Result.map Dict.toList operations of
+                        Ok (( label, ( color, op ) ) :: optail) ->
+                            let
+                                param : Param
+                                param =
+                                    { key = label
+                                    , op = op
+                                    , color = color
+                                    , size = initialSize
+                                    , queue = optail
+                                    }
+                            in
+                            run param
+
+                        _ ->
+                            Cmd.none
                     )
 
         Completed param (Ok times) ->
@@ -252,11 +256,12 @@ update msg model =
                         }
                             |> noCmd
 
-                    ( qhead, color ) :: qtail ->
+                    ( headLabel, ( color, op ) ) :: qtail ->
                         { model | times = newTimes }
                             |> withCmd
                                 (run
-                                    { key = qhead
+                                    { key = headLabel
+                                    , op = op
                                     , color = color
                                     , size = initialSize
                                     , queue = qtail
@@ -293,7 +298,7 @@ run param =
             Task.succeed (Err "Key not found")
                 |> Task.perform (Completed param)
 
-        Just f ->
+        Just ( _, f ) ->
             let
                 operation : Operation
                 operation =
@@ -370,15 +375,15 @@ generate size =
         |> Tuple.first
 
 
-operations : Result Error (Dict String (Int -> Operation))
+operations : Result Error (Dict String ( Color, Int -> Operation ))
 operations =
-    [ intersectCore "core" Dict.intersect
-    , intersectCore "toList" Intersect.toList
-    , intersectCore "folding" Intersect.folding
-    , intersectDotDot "dotdot" DDD.intersect
-    , intersectDotDot "toList_dotdot" Intersect.toList_DotDot
-    , intersectDotDot "folding_dotdot" Intersect.folding_DotDot
-    , intersectDotDot "recursion_dotdot" Intersect.recursion_DotDot
+    [ intersectCore "core" Color.red Dict.intersect
+    , intersectCore "toList" Color.green Intersect.toList
+    , intersectCore "folding" Color.blue Intersect.folding
+    , intersectDotDot "dotdot" Color.darkRed DDD.intersect
+    , intersectDotDot "toList_dotdot" Color.darkGreen Intersect.toList_DotDot
+    , intersectDotDot "folding_dotdot" Color.darkBlue Intersect.folding_DotDot
+    , intersectDotDot "recursion_dotdot" Color.darkYellow Intersect.recursion_DotDot
     ]
         |> Result.Extra.combine
         |> Result.map Dict.fromList
@@ -393,12 +398,12 @@ type alias Error =
     }
 
 
-intersectCore : String -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error ( String, Int -> Operation )
+intersectCore : String -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
 intersectCore label =
     intersect label .core Dict.toList
 
 
-intersectDotDot : String -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error ( String, Int -> Operation )
+intersectDotDot : String -> Color -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
 intersectDotDot label =
     intersect label .dotdot DDD.toList
 
@@ -407,8 +412,9 @@ intersect :
     String
     -> (Both Int Int -> dict)
     -> (dict -> List ( Int, Int ))
+    -> Color
     -> (dict -> dict -> dict)
-    -> Result Error ( String, Int -> Operation )
+    -> Result Error ( String, ( Color, Int -> Operation ) )
 intersect label =
     compare Dict.intersect ("intersect " ++ label)
 
@@ -418,9 +424,10 @@ compare :
     -> String
     -> (Both Int Int -> dict)
     -> (dict -> List ( Int, Int ))
+    -> Color
     -> (dict -> dict -> dict)
-    -> Result Error ( String, Int -> Operation )
-compare core label selector toList op =
+    -> Result Error ( String, ( Color, Int -> Operation ) )
+compare core label selector toList color op =
     let
         ltest : Both Int Int
         ltest =
@@ -441,17 +448,19 @@ compare core label selector toList op =
     if expected == actual then
         Ok
             ( label
-            , \size ->
-                let
-                    ls : dict
-                    ls =
-                        selector (generate size)
+            , ( color
+              , \size ->
+                    let
+                        ls : dict
+                        ls =
+                            selector (generate size)
 
-                    rs : dict
-                    rs =
-                        selector (generate (size + 1))
-                in
-                Benchmark.LowLevel.operation (\_ -> op ls rs)
+                        rs : dict
+                        rs =
+                            selector (generate (size + 1))
+                    in
+                    Benchmark.LowLevel.operation (\_ -> op ls rs)
+              )
             )
 
     else
