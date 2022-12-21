@@ -80,9 +80,15 @@ computeStatistics yList =
             Statistics.quantile 0.25 sortedYList
                 |> Maybe.withDefault 0
 
+        median : Float
+        median =
+            Statistics.quantile 0.5 sortedYList
+                |> Maybe.withDefault 0
+
         thirdQuartile : Float
         thirdQuartile =
-            Maybe.withDefault 0 <| quantile 0.75 sortedYList
+            quantile 0.75 sortedYList
+                |> Maybe.withDefault 0
 
         interQuartileRange : Float
         interQuartileRange =
@@ -95,12 +101,37 @@ computeStatistics yList =
         whiskerBottomMin : Float
         whiskerBottomMin =
             firstQuartile - (1.5 * interQuartileRange)
+
+        min : Float
+        min =
+            Maybe.withDefault 0 <| List.head <| List.Extra.dropWhile (\n -> n < whiskerBottomMin) sortedYList
+
+        max : Float
+        max =
+            Maybe.withDefault 0 <| List.head <| List.Extra.dropWhile (\n -> n > whiskerTopMax) reverseSortedYList
+
+        -- _ =
+        --     if firstQuartile > median || median > thirdQuartile || min > median || median > max then
+        --         let
+        --             _ = Debug.log "yList" yList
+        --             _ = Debug.log "firstQuartile" firstQuartile
+        --             _ = Debug.log "median" median
+        --             _ = Debug.log "thirdQuartile" thirdQuartile
+        --             _ = Debug.log "max" max
+        --             _ = Debug.log "min" min
+        --             _ = Debug.log "firstQuartile > median" <| firstQuartile > median
+        --             _ = Debug.log "median > thirdQuartile" <| median > thirdQuartile
+        --             _ = Debug.log "min > median" <| min > median
+        --             _ = Debug.log "median > max" <| median > max
+        --         in Debug.todo "WTF"
+        --     else
+        --         ()
     in
     { firstQuartile = firstQuartile
-    , median = Statistics.quantile 0.5 sortedYList |> Maybe.withDefault 0
+    , median = median
     , thirdQuartile = thirdQuartile
-    , max = computeWhiskerMax (<=) (Maybe.withDefault 0 (List.head reverseSortedYList)) whiskerTopMax reverseSortedYList
-    , min = computeWhiskerMax (>=) (Maybe.withDefault 0 (List.head sortedYList)) whiskerBottomMin sortedYList
+    , min = min
+    , max = max
     , outliers =
         List.Extra.takeWhile (\y -> y < whiskerBottomMin) sortedYList
             ++ List.Extra.takeWhile (\y -> y > whiskerTopMax) reverseSortedYList
