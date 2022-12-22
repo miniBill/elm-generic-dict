@@ -279,7 +279,11 @@ update msg model =
             let
                 continue : Bool
                 continue =
-                    incrementSize param.size <= maxSize && (model.slowBenchmark || times.median < 5)
+                    if model.slowBenchmark then
+                        incrementSize param.size <= maxSize
+
+                    else
+                        incrementSize param.size <= maxSize // 10 && (times.median < 5)
 
                 newTimes : Dict String Times
                 newTimes =
@@ -432,10 +436,10 @@ operations =
     [ ( 100, 1 ), ( 10, 1 ), ( 1, 1 ), ( 1, 10 ), ( 1, 100 ) ]
         |> List.map
             (\(( lr, rr ) as ratio) ->
-                [ intersectCore ratio "library" Color.red Dict.intersect
-                , intersectCore ratio "toList" Color.green Intersect.toList
-                , intersectCore ratio "folding" Color.blue Intersect.folding
-                , intersectDotDot ratio "library (ddd)" Color.darkRed DDD.intersect
+                [ --   intersectCore ratio "library" Color.red Dict.intersect
+                  -- , intersectCore ratio "toList" Color.green Intersect.toList
+                  -- , intersectCore ratio "folding" Color.blue Intersect.folding,
+                  intersectDotDot ratio "library (ddd)" Color.darkRed DDD.intersect
                 , intersectDotDot ratio "toList (ddd)" Color.darkGreen Intersect.toList_DotDot
                 , intersectDotDot ratio "folding (ddd)" Color.darkBlue Intersect.folding_DotDot
                 , intersectDotDot ratio "recursion (ddd)" Color.darkYellow Intersect.recursion_DotDot
