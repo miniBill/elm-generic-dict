@@ -412,13 +412,13 @@ operations =
     [ ( 100, 1 ), ( 10, 1 ), ( 1, 1 ), ( 1, 10 ), ( 1, 100 ) ]
         |> List.map
             (\(( lr, rr ) as ratio) ->
-                [ -- intersectCore ratio "core" Color.red Dict.intersect
+                [ --     intersectCore ratio "library" Color.red Dict.intersect
                   -- , intersectCore ratio "toList" Color.green Intersect.toList
-                  -- , intersectCore ratio "folding" Color.blue Intersect.folding,
-                  intersectDotDot ratio "dotdot" Color.darkRed DDD.intersect
-                , intersectDotDot ratio "toList_dotdot" Color.darkGreen Intersect.toList_DotDot
-                , intersectDotDot ratio "folding_dotdot" Color.darkBlue Intersect.folding_DotDot
-                , intersectDotDot ratio "recursion_dotdot" Color.darkYellow Intersect.recursion_DotDot
+                  -- , intersectCore ratio "folding" Color.blue Intersect.folding ,
+                  intersectDotDot ratio "library (ddd)" Color.darkRed DDD.intersect
+                , intersectDotDot ratio "toList (ddd)" Color.darkGreen Intersect.toList_DotDot
+                , intersectDotDot ratio "folding (ddd)" Color.darkBlue Intersect.folding_DotDot
+                , intersectDotDot ratio "recursion (ddd)" Color.darkYellow Intersect.recursion_DotDot
                 ]
                     |> Result.Extra.combine
                     |> Result.map
