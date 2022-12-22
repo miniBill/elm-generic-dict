@@ -321,11 +321,6 @@ update msg model =
                 |> noCmd
 
 
-isqrt : Int -> Int
-isqrt x =
-    floor (sqrt (toFloat x))
-
-
 initialSize : Int
 initialSize =
     100
@@ -470,7 +465,7 @@ compare :
     -> Color
     -> (dict -> dict -> dict)
     -> Result Error ( String, ( Color, Int -> Operation ) )
-compare (( lratio, rratio ) as ratio) label core selector toList color op =
+compare ( lratio, rratio ) label core selector toList color op =
     let
         ltest : Both Int Int
         ltest =
