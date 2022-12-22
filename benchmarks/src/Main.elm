@@ -85,17 +85,20 @@ view model =
         [ padding 10
         , spacing 10
         ]
-        [ if model.running then
-            button [ Background.color <| Element.rgb 0.8 0.8 0.8 ]
-                { onPress = Nothing
-                , label = text <| "Running"
-                }
+        [ row [ spacing 10 ]
+            [ if model.running then
+                button [ Background.color <| Element.rgb 0.8 0.8 0.8 ]
+                    { onPress = Nothing
+                    , label = text <| "Running"
+                    }
 
-          else
-            button []
-                { onPress = Just Run
-                , label = text <| "Run"
-                }
+              else
+                button []
+                    { onPress = Just Run
+                    , label = text <| "Run"
+                    }
+            , text "(the ratio (x:y) means that the smallest dict will be of the indicated size, and the other will be 10 or 100 times bigger)"
+            ]
         , if Dict.isEmpty model.times then
             Element.none
 
@@ -484,11 +487,11 @@ compare ( lratio, rratio ) label core selector toList color op =
                     let
                         lsize : Int
                         lsize =
-                            size // rratio
+                            size * lratio
 
                         rsize : Int
                         rsize =
-                            size // lratio
+                            size * rratio
 
                         rsizeFixed : Int
                         rsizeFixed =
