@@ -331,54 +331,43 @@ incrementSize size =
 
 run : ParamQueue -> Cmd Msg
 run param =
-    case
-        operations
-            |> Result.toMaybe
-            |> Maybe.andThen (Dict.get param.current.section)
-            |> Maybe.andThen (Dict.get param.current.key)
-    of
-        Nothing ->
-            Task.succeed (Err "Key not found")
-                |> Task.perform (Completed param)
+    let
+        operation : Operation
+        operation =
+            param.current.op param.size
+    in
+    Process.sleep 0
+        |> Task.andThen (\_ -> Benchmark.LowLevel.warmup operation)
+        |> Task.andThen (\_ -> Process.sleep 0)
+        |> Task.andThen (\_ -> Benchmark.LowLevel.findSampleSize operation)
+        |> Task.andThen (\sampleSize -> Process.sleep 0 |> Task.map (\_ -> sampleSize))
+        |> Task.andThen
+            (\sampleSize ->
+                let
+                    batchSize : Int
+                    batchSize =
+                        4
+                in
+                List.range 0 (max 1 <| (sampleSize + 2) // batchSize)
+                    |> List.map
+                        (\_ ->
+                            Benchmark.LowLevel.sample batchSize operation
+                                |> Task.map Just
+                        )
+                    |> intersperseInTotal 20 (Process.sleep 0 |> Task.map (\_ -> Nothing))
+                    |> Task.sequence
+                    |> Task.map (List.filterMap identity >> LinePlot.computeStatistics)
+            )
+        |> Task.mapError
+            (\e ->
+                case e of
+                    Benchmark.LowLevel.StackOverflow ->
+                        "Stack overflow"
 
-        Just ( _, f ) ->
-            let
-                operation : Operation
-                operation =
-                    f param.size
-            in
-            Process.sleep 0
-                |> Task.andThen (\_ -> Benchmark.LowLevel.warmup operation)
-                |> Task.andThen (\_ -> Process.sleep 0)
-                |> Task.andThen (\_ -> Benchmark.LowLevel.findSampleSize operation)
-                |> Task.andThen (\sampleSize -> Process.sleep 0 |> Task.map (\_ -> sampleSize))
-                |> Task.andThen
-                    (\sampleSize ->
-                        let
-                            batchSize : Int
-                            batchSize =
-                                4
-                        in
-                        List.range 0 (max 1 <| (sampleSize + 2) // batchSize)
-                            |> List.map
-                                (\_ ->
-                                    Benchmark.LowLevel.sample batchSize operation
-                                        |> Task.map Just
-                                )
-                            |> intersperseInTotal 20 (Process.sleep 0 |> Task.map (\_ -> Nothing))
-                            |> Task.sequence
-                            |> Task.map (List.filterMap identity >> LinePlot.computeStatistics)
-                    )
-                |> Task.mapError
-                    (\e ->
-                        case e of
-                            Benchmark.LowLevel.StackOverflow ->
-                                "Stack overflow"
-
-                            Benchmark.LowLevel.UnknownError msg ->
-                                msg
-                    )
-                |> Task.attempt (Completed param)
+                    Benchmark.LowLevel.UnknownError msg ->
+                        msg
+            )
+        |> Task.attempt (Completed param)
 
 
 intersperseInTotal : Int -> a -> List a -> List a
