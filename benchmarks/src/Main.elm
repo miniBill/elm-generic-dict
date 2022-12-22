@@ -270,7 +270,7 @@ update msg model =
             let
                 continue : Bool
                 continue =
-                    incrementSize param.size <= maxSize || times.median > 4
+                    incrementSize param.size <= maxSize && times.median < 7
 
                 newTimes : Dict String Times
                 newTimes =
