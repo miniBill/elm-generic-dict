@@ -41,11 +41,25 @@ padding =
 
 xScale : Data -> ContinuousScale Float
 xScale model =
-    model
-        |> List.concatMap (\( _, points ) -> Dict.keys points)
-        |> List.maximum
-        |> Maybe.withDefault 200
-        |> (\mx -> Scale.linear ( 0, w - 2 * padding ) ( 100, toFloat mx ))
+    let
+        allPoints : List Int
+        allPoints =
+            model
+                |> List.concatMap (\( _, points ) -> Dict.keys points)
+
+        min : Int
+        min =
+            allPoints
+                |> List.minimum
+                |> Maybe.withDefault 200
+
+        max : Int
+        max =
+            allPoints
+                |> List.maximum
+                |> Maybe.withDefault 200
+    in
+    Scale.linear ( 0, w - 2 * padding ) ( toFloat min, toFloat max )
 
 
 yScale : Float -> ContinuousScale Float
@@ -136,17 +150,6 @@ computeStatistics yList =
         List.Extra.takeWhile (\y -> y < whiskerBottomMin) sortedYList
             ++ List.Extra.takeWhile (\y -> y > whiskerTopMax) reverseSortedYList
     }
-
-
-{-| The whiskers should be either 1.5 the interquantile range or the highest datum, whichever is lowest.
--}
-computeWhiskerMax : (number -> number -> Bool) -> number -> number -> List number -> number
-computeWhiskerMax cmp dataMax whiskerMax sortedData =
-    if cmp whiskerMax dataMax then
-        Maybe.withDefault 0 <| List.head <| List.Extra.dropWhile (cmp whiskerMax) sortedData
-
-    else
-        dataMax
 
 
 xAxis : Data -> Svg msg
