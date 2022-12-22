@@ -5,7 +5,7 @@ import Browser
 import Color exposing (Color)
 import Dict exposing (Dict)
 import DictDotDot as DDD
-import Element exposing (Attribute, Element, centerY, column, el, height, padding, px, row, shrink, spacing, table, text, width, wrappedRow)
+import Element exposing (Attribute, Element, alignTop, centerY, column, el, height, padding, px, row, shrink, spacing, table, text, width, wrappedRow)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -104,7 +104,7 @@ view model =
                 |> Dict.toList
                 |> List.map
                     (\( sectionName, sectionTimes ) ->
-                        column [ spacing 10 ]
+                        column [ spacing 10, alignTop ]
                             [ el [ Font.bold, Font.size 24 ] <| text sectionName
                             , viewTable sectionTimes
                             , sectionTimes
@@ -147,7 +147,7 @@ viewTable times =
 
         header : String -> Maybe Color -> Element msg
         header label color =
-            row [ Font.bold, spacing 1 ]
+            row [ Font.bold, spacing 3 ]
                 [ case color of
                     Nothing ->
                         Element.none
