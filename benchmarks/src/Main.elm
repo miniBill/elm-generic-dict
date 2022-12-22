@@ -227,7 +227,7 @@ update msg model =
             let
                 continue : Bool
                 continue =
-                    param.size < maxSize
+                    incrementSize param.size <= maxSize
 
                 newTimes : Dict String ( Color, Dict Int BoxStats )
                 newTimes =
@@ -283,7 +283,7 @@ initialSize =
 
 maxSize : Int
 maxSize =
-    1000
+    2000
 
 
 incrementSize : Int -> Int
@@ -377,10 +377,10 @@ generate size =
 
 operations : Result Error (Dict String ( Color, Int -> Operation ))
 operations =
-    [ intersectCore "core" Color.red Dict.intersect
-    , intersectCore "toList" Color.green Intersect.toList
-    , intersectCore "folding" Color.blue Intersect.folding
-    , intersectDotDot "dotdot" Color.darkRed DDD.intersect
+    [ -- intersectCore "core" Color.red Dict.intersect
+      -- , intersectCore "toList" Color.green Intersect.toList
+      -- , intersectCore "folding" Color.blue Intersect.folding,
+      intersectDotDot "dotdot" Color.darkRed DDD.intersect
     , intersectDotDot "toList_dotdot" Color.darkGreen Intersect.toList_DotDot
     , intersectDotDot "folding_dotdot" Color.darkBlue Intersect.folding_DotDot
     , intersectDotDot "recursion_dotdot" Color.darkYellow Intersect.recursion_DotDot
