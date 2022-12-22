@@ -27,6 +27,7 @@ type alias Model =
     { times : Dict String Times
     , errors : List String
     , running : Bool
+    , slowBenchmark : Bool
     }
 
 
@@ -56,6 +57,7 @@ type alias Ratio =
 type Msg
     = Run
     | Completed ParamQueue (Result String BoxStats)
+    | SlowBenchmark Bool
 
 
 main : Program Flags Model Msg
@@ -73,6 +75,7 @@ init _ =
     ( { times = Dict.empty
       , running = False
       , errors = []
+      , slowBenchmark = False
       }
     , Cmd.none
     )
@@ -89,7 +92,7 @@ view model =
         [ padding 10
         , spacing 10
         ]
-        [ row [ spacing 10 ]
+        [ wrappedRow [ spacing 10 ]
             [ if model.running then
                 button [ Background.color <| Element.rgb 0.8 0.8 0.8 ]
                     { onPress = Nothing
@@ -101,6 +104,12 @@ view model =
                     { onPress = Just Run
                     , label = text <| "Run"
                     }
+            , Input.checkbox []
+                { onChange = SlowBenchmark
+                , checked = model.slowBenchmark
+                , label = Input.labelRight [] <| text "Full benchmark (slow!)"
+                , icon = Input.defaultCheckbox
+                }
             , text "(the ratio (x:y) means that the smallest dict will be of the indicated size, and the other will be 10 or 100 times bigger)"
             ]
         , if Dict.isEmpty model.times then
@@ -270,7 +279,7 @@ update msg model =
             let
                 continue : Bool
                 continue =
-                    incrementSize param.size <= maxSize && times.median < 7
+                    incrementSize param.size <= maxSize && (model.slowBenchmark || times.median < 5)
 
                 newTimes : Dict String Times
                 newTimes =
@@ -318,6 +327,10 @@ update msg model =
                 | running = False
                 , errors = err :: model.errors
             }
+                |> noCmd
+
+        SlowBenchmark slowBenchmark ->
+            { model | slowBenchmark = slowBenchmark }
                 |> noCmd
 
 
@@ -419,10 +432,10 @@ operations =
     [ ( 100, 1 ), ( 10, 1 ), ( 1, 1 ), ( 1, 10 ), ( 1, 100 ) ]
         |> List.map
             (\(( lr, rr ) as ratio) ->
-                [ --     intersectCore ratio "library" Color.red Dict.intersect
-                  -- , intersectCore ratio "toList" Color.green Intersect.toList
-                  -- , intersectCore ratio "folding" Color.blue Intersect.folding ,
-                  intersectDotDot ratio "library (ddd)" Color.darkRed DDD.intersect
+                [ intersectCore ratio "library" Color.red Dict.intersect
+                , intersectCore ratio "toList" Color.green Intersect.toList
+                , intersectCore ratio "folding" Color.blue Intersect.folding
+                , intersectDotDot ratio "library (ddd)" Color.darkRed DDD.intersect
                 , intersectDotDot ratio "toList (ddd)" Color.darkGreen Intersect.toList_DotDot
                 , intersectDotDot ratio "folding (ddd)" Color.darkBlue Intersect.folding_DotDot
                 , intersectDotDot ratio "recursion (ddd)" Color.darkYellow Intersect.recursion_DotDot
