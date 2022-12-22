@@ -409,17 +409,23 @@ generate size =
 
 operations : Result Error (Dict String (Dict String ( Color, Int -> Operation )))
 operations =
-    [ [ -- intersectCore "core" Color.red Dict.intersect
-        -- , intersectCore "toList" Color.green Intersect.toList
-        -- , intersectCore "folding" Color.blue Intersect.folding,
-        intersectDotDot "dotdot" Color.darkRed DDD.intersect
-      , intersectDotDot "toList_dotdot" Color.darkGreen Intersect.toList_DotDot
-      , intersectDotDot "folding_dotdot" Color.darkBlue Intersect.folding_DotDot
-      , intersectDotDot "recursion_dotdot" Color.darkYellow Intersect.recursion_DotDot
-      ]
-        |> Result.Extra.combine
-        |> Result.map (Dict.fromList >> Tuple.pair "intersection (1:1)")
-    ]
+    [ ( 1, 1 ), ( 1, 10 ), ( 10, 1 ) ]
+        |> List.map
+            (\(( lr, rr ) as ratio) ->
+                [ -- intersectCore ratio "core" Color.red Dict.intersect
+                  -- , intersectCore ratio "toList" Color.green Intersect.toList
+                  -- , intersectCore ratio "folding" Color.blue Intersect.folding,
+                  intersectDotDot ratio "dotdot" Color.darkRed DDD.intersect
+                , intersectDotDot ratio "toList_dotdot" Color.darkGreen Intersect.toList_DotDot
+                , intersectDotDot ratio "folding_dotdot" Color.darkBlue Intersect.folding_DotDot
+                , intersectDotDot ratio "recursion_dotdot" Color.darkYellow Intersect.recursion_DotDot
+                ]
+                    |> Result.Extra.combine
+                    |> Result.map
+                        (Dict.fromList
+                            >> Tuple.pair ("intersection (" ++ String.fromInt lr ++ ":" ++ String.fromInt rr ++ ")")
+                        )
+            )
         |> Result.Extra.combine
         |> Result.map Dict.fromList
 
@@ -433,33 +439,34 @@ type alias Error =
     }
 
 
-intersectCore : String -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
-intersectCore label =
-    compare Dict.intersect label .core Dict.toList
+intersectCore : ( Int, Int ) -> String -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
+intersectCore ratio label =
+    compare ratio label Dict.intersect .core Dict.toList
 
 
-intersectDotDot : String -> Color -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
-intersectDotDot label =
-    compare Dict.intersect label .dotdot DDD.toList
+intersectDotDot : ( Int, Int ) -> String -> Color -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
+intersectDotDot ratio label =
+    compare ratio label Dict.intersect .dotdot DDD.toList
 
 
 compare :
-    (Dict Int Int -> Dict Int Int -> Dict Int Int)
+    ( Int, Int )
     -> String
+    -> (Dict Int Int -> Dict Int Int -> Dict Int Int)
     -> (Both Int Int -> dict)
     -> (dict -> List ( Int, Int ))
     -> Color
     -> (dict -> dict -> dict)
     -> Result Error ( String, ( Color, Int -> Operation ) )
-compare core label selector toList color op =
+compare ( lratio, rratio ) label core selector toList color op =
     let
         ltest : Both Int Int
         ltest =
-            generate 150
+            generate (150 // rratio)
 
         rtest : Both Int Int
         rtest =
-            generate 151
+            generate (151 // lratio)
 
         expected : List ( Int, Int )
         expected =
