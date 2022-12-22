@@ -45,8 +45,13 @@ type alias Param =
     { section : String
     , key : String
     , color : Color
+    , ratio : Ratio
     , op : Int -> Operation
     }
+
+
+type alias Ratio =
+    ( Int, Int )
 
 
 type Msg
@@ -224,14 +229,15 @@ update msg model =
         Run ->
             let
                 sectionToQueue :
-                    ( String, Dict String ( Color, Int -> Operation ) )
-                    -> List { section : String, key : String, color : Color, op : Int -> Operation }
+                    ( String, Dict String ( Color, Ratio, Int -> Operation ) )
+                    -> List Param
                 sectionToQueue ( section, ops ) =
                     ops
                         |> Dict.toList
                         |> List.map
-                            (\( key, ( color, op ) ) ->
+                            (\( key, ( color, ratio, op ) ) ->
                                 { section = section
+                                , ratio = ratio
                                 , key = key
                                 , color = color
                                 , op = op
@@ -249,10 +255,13 @@ update msg model =
                      of
                         Ok (head :: tail) ->
                             let
+                                ( lratio, rratio ) =
+                                    head.ratio
+
                                 queue : ParamQueue
                                 queue =
                                     { current = head
-                                    , size = initialSize
+                                    , size = initialSize // isqrt (lratio * rratio)
                                     , queue = tail
                                     }
                             in
@@ -315,6 +324,11 @@ update msg model =
                 , errors = err :: model.errors
             }
                 |> noCmd
+
+
+isqrt : Int -> Int
+isqrt x =
+    floor (sqrt (toFloat x))
 
 
 initialSize : Int
@@ -410,7 +424,7 @@ generate size =
         |> Tuple.first
 
 
-operations : Result Error (Dict String (Dict String ( Color, Int -> Operation )))
+operations : Result Error (Dict String (Dict String ( Color, Ratio, Int -> Operation )))
 operations =
     [ ( 100, 1 ), ( 10, 1 ), ( 1, 1 ), ( 1, 10 ), ( 1, 100 ) ]
         |> List.map
@@ -442,12 +456,12 @@ type alias Error =
     }
 
 
-intersectCore : ( Int, Int ) -> String -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
+intersectCore : ( Int, Int ) -> String -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error ( String, ( Color, Ratio, Int -> Operation ) )
 intersectCore ratio label =
     compare ratio label Dict.intersect .core Dict.toList
 
 
-intersectDotDot : ( Int, Int ) -> String -> Color -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
+intersectDotDot : ( Int, Int ) -> String -> Color -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error ( String, ( Color, Ratio, Int -> Operation ) )
 intersectDotDot ratio label =
     compare ratio label Dict.intersect .dotdot DDD.toList
 
@@ -460,8 +474,8 @@ compare :
     -> (dict -> List ( Int, Int ))
     -> Color
     -> (dict -> dict -> dict)
-    -> Result Error ( String, ( Color, Int -> Operation ) )
-compare ( lratio, rratio ) label core selector toList color op =
+    -> Result Error ( String, ( Color, Ratio, Int -> Operation ) )
+compare (( lratio, rratio ) as ratio) label core selector toList color op =
     let
         ltest : Both Int Int
         ltest =
@@ -483,6 +497,7 @@ compare ( lratio, rratio ) label core selector toList color op =
         Ok
             ( label
             , ( color
+              , ratio
               , \size ->
                     let
                         lsize : Int
