@@ -114,12 +114,12 @@ view model =
                     (\( sectionName, sectionTimes ) ->
                         column [ spacing 10, alignTop ]
                             [ el [ Font.bold, Font.size 24 ] <| text sectionName
-                            , viewTable sectionTimes
                             , sectionTimes
                                 |> Dict.values
                                 |> LinePlot.view
                                 |> Element.html
                                 |> el []
+                            , viewTable sectionTimes
                             ]
                     )
                 |> wrappedRow [ spacing 10 ]
@@ -255,13 +255,10 @@ update msg model =
                      of
                         Ok (head :: tail) ->
                             let
-                                ( lratio, rratio ) =
-                                    head.ratio
-
                                 queue : ParamQueue
                                 queue =
                                     { current = head
-                                    , size = initialSize // isqrt (lratio * rratio)
+                                    , size = initialSize
                                     , queue = tail
                                     }
                             in
@@ -273,9 +270,12 @@ update msg model =
 
         Completed param (Ok times) ->
             let
+                ( lratio, rratio ) =
+                    param.current.ratio
+
                 continue : Bool
                 continue =
-                    incrementSize param.size <= maxSize
+                    incrementSize param.size <= maxSize // isqrt (lratio * rratio)
 
                 newTimes : Dict String Times
                 newTimes =
