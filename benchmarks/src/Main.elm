@@ -102,16 +102,17 @@ view model =
           else
             model.times
                 |> Dict.toList
-                |> List.concatMap
+                |> List.map
                     (\( sectionName, sectionTimes ) ->
-                        [ el [ Font.bold, Font.size 24 ] <| text sectionName
-                        , viewTable sectionTimes
-                        , sectionTimes
-                            |> Dict.values
-                            |> LinePlot.view
-                            |> Element.html
-                            |> el []
-                        ]
+                        column [ spacing 10 ]
+                            [ el [ Font.bold, Font.size 24 ] <| text sectionName
+                            , viewTable sectionTimes
+                            , sectionTimes
+                                |> Dict.values
+                                |> LinePlot.view
+                                |> Element.html
+                                |> el []
+                            ]
                     )
                 |> wrappedRow [ spacing 10 ]
         , model.errors
