@@ -17,6 +17,7 @@ import Process
 import Random
 import Result.Extra
 import Task
+import Union
 
 
 type alias Flags =
@@ -283,7 +284,7 @@ update msg model =
                         incrementSize param.size <= maxSize
 
                     else
-                        incrementSize param.size <= maxSize // 10 && (times.median < 5)
+                        incrementSize param.size <= maxSize // 3 && (times.median < 5)
 
                 newTimes : Dict String Times
                 newTimes =
@@ -433,17 +434,42 @@ generate size =
 
 operations : Result Error (Dict String (Dict String ( Color, Int -> Operation )))
 operations =
+    let
+        intersections : Ratio -> List (Result Error ( String, ( Color, Int -> Operation ) ))
+        intersections ratio =
+            if False then
+                [ --   compareCore "library"  ratio  Color.red Dict.intersect  Dict.intersect
+                  -- , compareCore "toList"  ratio  Color.green Dict.intersect  Intersect.toList
+                  -- , compareCore "folding"  ratio  Color.blue Dict.intersect  Intersect.folding,
+                  compareDotDot "library (ddd)" ratio Color.darkRed Dict.intersect DDD.intersect
+                , compareDotDot "toList (ddd)" ratio Color.darkGreen Dict.intersect Intersect.toList_DotDot
+                , compareDotDot "folding (ddd)" ratio Color.darkBlue Dict.intersect Intersect.folding_DotDot
+                , compareDotDot "recursion (ddd)" ratio Color.darkYellow Dict.intersect Intersect.recursion_DotDot
+                ]
+
+            else
+                []
+
+        unions : Ratio -> List (Result Error ( String, ( Color, Int -> Operation ) ))
+        unions ratio =
+            if True then
+                [ --   compareCore "library"  ratio  Color.red Dict.union  Dict.union
+                  -- , compareCore "toList"  ratio  Color.green Dict.union  Union.toList
+                  -- , compareCore "folding"  ratio  Color.blue Dict.union  Union.folding,
+                  compareDotDot "library (ddd)" ratio Color.darkRed Dict.union DDD.union
+                , compareDotDot "toList (ddd)" ratio Color.darkGreen Dict.union Union.toList_DotDot
+
+                -- , compareDotDot "folding (ddd)"  ratio  Color.darkBlue Dict.union  Union.folding_DotDot
+                -- , compareDotDot "recursion (ddd)"  ratio  Color.darkYellow Dict.union  Union.recursion_DotDot
+                ]
+
+            else
+                []
+    in
     [ ( 100, 1 ), ( 10, 1 ), ( 1, 1 ), ( 1, 10 ), ( 1, 100 ) ]
         |> List.map
             (\(( lr, rr ) as ratio) ->
-                [ --   intersectCore ratio "library" Color.red Dict.intersect
-                  -- , intersectCore ratio "toList" Color.green Intersect.toList
-                  -- , intersectCore ratio "folding" Color.blue Intersect.folding,
-                  intersectDotDot ratio "library (ddd)" Color.darkRed DDD.intersect
-                , intersectDotDot ratio "toList (ddd)" Color.darkGreen Intersect.toList_DotDot
-                , intersectDotDot ratio "folding (ddd)" Color.darkBlue Intersect.folding_DotDot
-                , intersectDotDot ratio "recursion (ddd)" Color.darkYellow Intersect.recursion_DotDot
-                ]
+                (intersections ratio ++ unions ratio)
                     |> Result.Extra.combine
                     |> Result.map
                         (Dict.fromList
@@ -452,6 +478,16 @@ operations =
             )
         |> Result.Extra.combine
         |> Result.map Dict.fromList
+
+
+compareCore : String -> Ratio -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
+compareCore =
+    compare Dict.toList .core
+
+
+compareDotDot : String -> Ratio -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
+compareDotDot =
+    compare DDD.toList .dotdot
 
 
 type alias Error =
@@ -463,26 +499,16 @@ type alias Error =
     }
 
 
-intersectCore : Ratio -> String -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
-intersectCore ratio label =
-    compare ratio label Dict.intersect .core Dict.toList
-
-
-intersectDotDot : Ratio -> String -> Color -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
-intersectDotDot ratio label =
-    compare ratio label Dict.intersect .dotdot DDD.toList
-
-
 compare :
-    Ratio
-    -> String
-    -> (Dict Int Int -> Dict Int Int -> Dict Int Int)
+    (dict -> List ( Int, Int ))
     -> (Both Int Int -> dict)
-    -> (dict -> List ( Int, Int ))
+    -> String
+    -> Ratio
     -> Color
+    -> (Dict Int Int -> Dict Int Int -> Dict Int Int)
     -> (dict -> dict -> dict)
     -> Result Error ( String, ( Color, Int -> Operation ) )
-compare ( lratio, rratio ) label core selector toList color op =
+compare toList selector label ( lratio, rratio ) color core op =
     let
         ltest : Both Int Int
         ltest =
