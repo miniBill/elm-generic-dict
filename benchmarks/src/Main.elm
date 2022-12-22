@@ -409,7 +409,7 @@ generate size =
 
 operations : Result Error (Dict String (Dict String ( Color, Int -> Operation )))
 operations =
-    [ ( 1, 1 ), ( 1, 10 ), ( 10, 1 ) ]
+    [ ( 100, 1 ), ( 10, 1 ), ( 1, 1 ), ( 1, 10 ), ( 1, 100 ) ]
         |> List.map
             (\(( lr, rr ) as ratio) ->
                 [ -- intersectCore ratio "core" Color.red Dict.intersect
