@@ -462,11 +462,11 @@ compare ( lratio, rratio ) label core selector toList color op =
     let
         ltest : Both Int Int
         ltest =
-            generate (150 // rratio)
+            generate 150
 
         rtest : Both Int Int
         rtest =
-            generate (151 // lratio)
+            generate 151
 
         expected : List ( Int, Int )
         expected =
@@ -482,13 +482,30 @@ compare ( lratio, rratio ) label core selector toList color op =
             , ( color
               , \size ->
                     let
+                        lsize : Int
+                        lsize =
+                            size // rratio
+
+                        rsize : Int
+                        rsize =
+                            size // lratio
+
+                        rsizeFixed : Int
+                        rsizeFixed =
+                            if rsize == lsize then
+                                -- Prevent having the exact same size, and thus random seed
+                                rsize + 1
+
+                            else
+                                rsize
+
                         ls : dict
                         ls =
-                            selector (generate size)
+                            selector (generate lsize)
 
                         rs : dict
                         rs =
-                            selector (generate (size + 1))
+                            selector (generate rsizeFixed)
                     in
                     Benchmark.LowLevel.operation (\_ -> op ls rs)
               )
