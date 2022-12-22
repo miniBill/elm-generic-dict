@@ -1,11 +1,11 @@
-module Main exposing (Flags, Model, Msg, main)
+module Main exposing (Flags, Model, Msg, Times, main)
 
 import Benchmark.LowLevel exposing (Operation)
 import Browser
 import Color exposing (Color)
 import Dict exposing (Dict)
 import DictDotDot as DDD
-import Element exposing (Attribute, Element, centerY, column, el, height, padding, px, row, shrink, spacing, table, text, width)
+import Element exposing (Attribute, Element, centerY, column, el, height, padding, px, row, shrink, spacing, table, text, width, wrappedRow)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -24,24 +24,34 @@ type alias Flags =
 
 
 type alias Model =
-    { times : Dict String ( Color, Dict Int BoxStats )
+    { times : Dict String Times
     , errors : List String
     , running : Bool
     }
 
 
+type alias Times =
+    Dict String ( Color, Dict Int BoxStats )
+
+
+type alias ParamQueue =
+    { current : Param
+    , size : Int
+    , queue : List Param
+    }
+
+
 type alias Param =
-    { key : String
+    { section : String
+    , key : String
     , color : Color
     , op : Int -> Operation
-    , size : Int
-    , queue : List ( String, ( Color, Int -> Operation ) )
     }
 
 
 type Msg
     = Run
-    | Completed Param (Result String BoxStats)
+    | Completed ParamQueue (Result String BoxStats)
 
 
 main : Program Flags Model Msg
@@ -75,13 +85,14 @@ view model =
         [ padding 10
         , spacing 10
         ]
-        [ button [] <|
-            if model.running then
+        [ if model.running then
+            button [ Background.color <| Element.rgb 0.8 0.8 0.8 ]
                 { onPress = Nothing
                 , label = text <| "Running"
                 }
 
-            else
+          else
+            button []
                 { onPress = Just Run
                 , label = text <| "Run"
                 }
@@ -89,28 +100,32 @@ view model =
             Element.none
 
           else
-            viewTable model
-        , if Dict.isEmpty model.times then
-            Element.none
-
-          else
             model.times
-                |> Dict.values
-                |> LinePlot.view
-                |> Element.html
-                |> el []
+                |> Dict.toList
+                |> List.concatMap
+                    (\( sectionName, sectionTimes ) ->
+                        [ el [ Font.bold, Font.size 24 ] <| text sectionName
+                        , viewTable sectionTimes
+                        , sectionTimes
+                            |> Dict.values
+                            |> LinePlot.view
+                            |> Element.html
+                            |> el []
+                        ]
+                    )
+                |> wrappedRow [ spacing 10 ]
         , model.errors
             |> List.map (\err -> el [] <| text err)
             |> column [ spacing 10 ]
         ]
 
 
-viewTable : Model -> Element Msg
-viewTable model =
+viewTable : Times -> Element Msg
+viewTable times =
     let
         data : List ( Int, Dict String BoxStats )
         data =
-            model.times
+            times
                 |> Dict.toList
                 |> List.concatMap (\( key, ( _, dict ) ) -> List.map (\( size, stats ) -> ( size, key, stats )) (Dict.toList dict))
                 |> List.Extra.gatherEqualsBy (\( size, _, _ ) -> size)
@@ -125,7 +140,7 @@ viewTable model =
 
         keys : List ( String, Color )
         keys =
-            model.times
+            times
                 |> Dict.toList
                 |> List.map (\( key, ( color, _ ) ) -> ( key, color ))
 
@@ -203,21 +218,41 @@ update msg model =
     in
     case msg of
         Run ->
+            let
+                sectionToQueue :
+                    ( String, Dict String ( Color, Int -> Operation ) )
+                    -> List { section : String, key : String, color : Color, op : Int -> Operation }
+                sectionToQueue ( section, ops ) =
+                    ops
+                        |> Dict.toList
+                        |> List.map
+                            (\( key, ( color, op ) ) ->
+                                { section = section
+                                , key = key
+                                , color = color
+                                , op = op
+                                }
+                            )
+            in
             { model | running = True }
                 |> withCmd
-                    (case Result.map Dict.toList operations of
-                        Ok (( label, ( color, op ) ) :: optail) ->
+                    (case
+                        Result.map
+                            (Dict.toList
+                                >> List.concatMap sectionToQueue
+                            )
+                            operations
+                     of
+                        Ok (head :: tail) ->
                             let
-                                param : Param
-                                param =
-                                    { key = label
-                                    , op = op
-                                    , color = color
+                                queue : ParamQueue
+                                queue =
+                                    { current = head
                                     , size = initialSize
-                                    , queue = optail
+                                    , queue = tail
                                     }
                             in
-                            run param
+                            run queue
 
                         _ ->
                             Cmd.none
@@ -229,12 +264,16 @@ update msg model =
                 continue =
                     incrementSize param.size <= maxSize
 
-                newTimes : Dict String ( Color, Dict Int BoxStats )
+                newTimes : Dict String Times
                 newTimes =
-                    Dict.update
-                        param.key
-                        (\v ->
-                            Just ( param.color, Dict.insert param.size times (Maybe.withDefault Dict.empty <| Maybe.map Tuple.second v) )
+                    Dict.update param.current.section
+                        (Maybe.withDefault Dict.empty
+                            >> Dict.update
+                                param.current.key
+                                (\v ->
+                                    Just ( param.current.color, Dict.insert param.size times (Maybe.withDefault Dict.empty <| Maybe.map Tuple.second v) )
+                                )
+                            >> Just
                         )
                         model.times
             in
@@ -256,13 +295,11 @@ update msg model =
                         }
                             |> noCmd
 
-                    ( headLabel, ( color, op ) ) :: qtail ->
+                    qhead :: qtail ->
                         { model | times = newTimes }
                             |> withCmd
                                 (run
-                                    { key = headLabel
-                                    , op = op
-                                    , color = color
+                                    { current = qhead
                                     , size = initialSize
                                     , queue = qtail
                                     }
@@ -291,9 +328,14 @@ incrementSize size =
     size * 3 // 2
 
 
-run : Param -> Cmd Msg
+run : ParamQueue -> Cmd Msg
 run param =
-    case operations |> Result.toMaybe |> Maybe.andThen (Dict.get param.key) of
+    case
+        operations
+            |> Result.toMaybe
+            |> Maybe.andThen (Dict.get param.current.section)
+            |> Maybe.andThen (Dict.get param.current.key)
+    of
         Nothing ->
             Task.succeed (Err "Key not found")
                 |> Task.perform (Completed param)
@@ -375,15 +417,18 @@ generate size =
         |> Tuple.first
 
 
-operations : Result Error (Dict String ( Color, Int -> Operation ))
+operations : Result Error (Dict String (Dict String ( Color, Int -> Operation )))
 operations =
-    [ -- intersectCore "core" Color.red Dict.intersect
-      -- , intersectCore "toList" Color.green Intersect.toList
-      -- , intersectCore "folding" Color.blue Intersect.folding,
-      intersectDotDot "dotdot" Color.darkRed DDD.intersect
-    , intersectDotDot "toList_dotdot" Color.darkGreen Intersect.toList_DotDot
-    , intersectDotDot "folding_dotdot" Color.darkBlue Intersect.folding_DotDot
-    , intersectDotDot "recursion_dotdot" Color.darkYellow Intersect.recursion_DotDot
+    [ [ -- intersectCore "core" Color.red Dict.intersect
+        -- , intersectCore "toList" Color.green Intersect.toList
+        -- , intersectCore "folding" Color.blue Intersect.folding,
+        intersectDotDot "dotdot" Color.darkRed DDD.intersect
+      , intersectDotDot "toList_dotdot" Color.darkGreen Intersect.toList_DotDot
+      , intersectDotDot "folding_dotdot" Color.darkBlue Intersect.folding_DotDot
+      , intersectDotDot "recursion_dotdot" Color.darkYellow Intersect.recursion_DotDot
+      ]
+        |> Result.Extra.combine
+        |> Result.map (Dict.fromList >> Tuple.pair "intersection (1:1)")
     ]
         |> Result.Extra.combine
         |> Result.map Dict.fromList
@@ -400,23 +445,12 @@ type alias Error =
 
 intersectCore : String -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
 intersectCore label =
-    intersect label .core Dict.toList
+    compare Dict.intersect label .core Dict.toList
 
 
 intersectDotDot : String -> Color -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
 intersectDotDot label =
-    intersect label .dotdot DDD.toList
-
-
-intersect :
-    String
-    -> (Both Int Int -> dict)
-    -> (dict -> List ( Int, Int ))
-    -> Color
-    -> (dict -> dict -> dict)
-    -> Result Error ( String, ( Color, Int -> Operation ) )
-intersect label =
-    compare Dict.intersect ("intersect " ++ label)
+    compare Dict.intersect label .dotdot DDD.toList
 
 
 compare :

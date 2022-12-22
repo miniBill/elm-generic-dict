@@ -26,12 +26,12 @@ type alias Datum =
 
 w : Float
 w =
-    900
+    600
 
 
 h : Float
 h =
-    450
+    300
 
 
 padding : Float
