@@ -3,7 +3,7 @@ module CustomDict exposing
     , withKey
     , withToComparable
     , generate
-    , withSize
+    , withAdditionalDeclarations, withSize
     )
 
 {-|
@@ -36,6 +36,7 @@ type Config
         , namespace : List String
         , size : Bool
         , toComparable : Elm.Expression -> Elm.Expression
+        , customDeclarations : List Elm.Declaration
         }
 
 
@@ -46,6 +47,7 @@ withKey keyType =
         , namespace = []
         , size = False
         , toComparable = identity
+        , customDeclarations = []
         }
 
 
@@ -62,7 +64,7 @@ withSize size (Config config) =
 
 
 generate : Config -> Elm.File
-generate (Config { size, keyType, toComparable, namespace }) =
+generate (Config { size, keyType, toComparable, namespace, customDeclarations }) =
     let
         keyTypeName : String
         keyTypeName =
@@ -152,7 +154,7 @@ generate (Config { size, keyType, toComparable, namespace }) =
                 ]
                     |> List.map (\f -> f utils)
     in
-    Elm.file (namespace ++ [ dictTypeName ]) decls
+    Elm.file (namespace ++ [ dictTypeName ]) (customDeclarations ++ decls)
 
 
 type alias Utils =
@@ -271,15 +273,7 @@ isEmptyDeclaration : Utils -> Elm.Declaration
 isEmptyDeclaration ({ annotation } as utils) =
     Elm.fn
         ( "d", Just <| annotation "v" )
-        (decomposeDict utils
-            (\dict ->
-                build utils
-                    "v"
-                    (Gen.Dict.isEmpty
-                        dict
-                    )
-            )
-        )
+        (decomposeDict utils Gen.Dict.isEmpty)
         |> Elm.declaration "isEmpty"
         |> Elm.exposeWith { exposeConstructor = False, group = Just "Query" }
 
@@ -289,16 +283,7 @@ memberDeclaration ({ keyType, annotation, toComparable } as utils) =
     Elm.fn2
         ( "key", Just keyType )
         ( "d", Just <| annotation "v" )
-        (\key ->
-            decomposeDict utils
-                (\dict ->
-                    build utils
-                        "v"
-                        (Gen.Dict.member (toComparable key)
-                            dict
-                        )
-                )
-        )
+        (\key -> decomposeDict utils (Gen.Dict.member (toComparable key)))
         |> Elm.declaration "member"
         |> Elm.exposeWith { exposeConstructor = False, group = Just "Query" }
 
@@ -314,6 +299,7 @@ getDeclaration ({ keyType, annotation, toComparable } as utils) =
                     Gen.Dict.get (toComparable key)
                         dict
                         |> Gen.Maybe.map Gen.Tuple.second
+                        |> Elm.withType (Type.namedWith [] "Maybe" [ Type.var "v" ])
                 )
         )
         |> Elm.declaration "get"
@@ -365,7 +351,7 @@ toListDeclaration ({ annotation } as utils) =
 
 
 fromListDeclaration : Utils -> Elm.Declaration
-fromListDeclaration ({ keyType } as utils) =
+fromListDeclaration ({ keyType, toComparable } as utils) =
     Elm.fn
         ( "l"
         , Just
@@ -377,7 +363,7 @@ fromListDeclaration ({ keyType } as utils) =
             l
                 |> Gen.List.call_.map
                     (Elm.functionReduced "e" <|
-                        \e -> Elm.Case.tuple e "k" "v" (\k _ -> Elm.tuple k e)
+                        \e -> Elm.Case.tuple e "k" "v" (\k _ -> Elm.tuple (toComparable k) e)
                     )
                 |> Gen.Dict.call_.fromList
                 |> build
@@ -399,14 +385,21 @@ mapDeclaration ({ keyType, annotation } as utils) =
         )
         ( "d", Just <| annotation "a" )
         (\f d ->
-            build utils "b" <|
-                decomposeDict utils
-                    (Gen.Dict.map
-                        (\_ kv ->
-                            Elm.Case.tuple kv "k" "a" (\k v -> Elm.apply f [ k, v ])
-                        )
-                    )
-                    d
+            decomposeDict utils
+                (\dict ->
+                    dict
+                        |> Gen.Dict.map
+                            (\_ kv ->
+                                Elm.Case.tuple kv
+                                    "k"
+                                    "a"
+                                    (\k v ->
+                                        Elm.tuple k <| Elm.apply f [ k, v ]
+                                    )
+                            )
+                        |> build utils "b"
+                )
+                d
         )
         |> Elm.declaration "map"
         |> Elm.exposeWith { exposeConstructor = False, group = Just "Transform" }
@@ -552,3 +545,8 @@ isLower s =
             String.left 1 s
     in
     String.toLower first == first
+
+
+withAdditionalDeclarations : List Elm.Declaration -> Config -> Config
+withAdditionalDeclarations decls (Config config) =
+    Config { config | customDeclarations = config.customDeclarations ++ decls }
