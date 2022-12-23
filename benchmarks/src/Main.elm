@@ -106,7 +106,7 @@ view model =
                 |> ParamDict.toList
                 |> List.Extra.gatherEqualsBy (\( param, _ ) -> ( param.section, param.ratio ))
                 |> List.map
-                    (\( ( { section, ratio, color }, _ ) as head, tail ) ->
+                    (\( ( { section, ratio }, _ ) as head, tail ) ->
                         let
                             ( lratio, rratio ) =
                                 ratio
@@ -114,7 +114,7 @@ view model =
                         column [ spacing 10, alignTop ]
                             [ el [ Font.bold, Font.size 24 ] <| text <| section ++ " (" ++ String.fromInt lratio ++ ":" ++ String.fromInt rratio ++ ")"
                             , (head :: tail)
-                                |> List.map (\( _, times ) -> ( color, times ))
+                                |> List.map (\( { color }, times ) -> ( color, times ))
                                 |> LinePlot.view
                                 |> Element.html
                                 |> el []
@@ -399,67 +399,68 @@ generate size =
 operations : Result Error (List Param)
 operations =
     let
-        intersections : Ratio -> List (Result Error (String -> Param))
-        intersections ratio =
-            if False then
-                [ --   compareCore "library"  ratio  Color.red Dict.intersect  Dict.intersect
-                  -- , compareCore "toList"  ratio  Color.green Dict.intersect  Intersect.toList
-                  -- , compareCore "folding"  ratio  Color.blue Dict.intersect  Intersect.folding,
-                  compareDotDot "library (ddd)" ratio Color.darkRed Dict.intersect DDD.intersect
-                , compareDotDot "toList (ddd)" ratio Color.darkGreen Dict.intersect Intersect.toList_DotDot
-                , compareDotDot "folding (ddd)" ratio Color.darkBlue Dict.intersect Intersect.folding_DotDot
-                , compareDotDot "recursion (ddd)" ratio Color.darkYellow Dict.intersect Intersect.recursion_DotDot
+        intersections : List ({ ratio : Ratio, core : Dict Int Int -> Dict Int Int -> Dict Int Int, section : String } -> Result Error Param)
+        intersections =
+            if True then
+                [ --   compareCore "library" Color.red Dict.intersect
+                  -- , compareCore "toList" Color.green Intersect.toList
+                  -- , compareCore "folding" Color.blue Intersect.folding,
+                  compareDotDot "library (ddd)" Color.darkRed DDD.intersect
+                , compareDotDot "toList (ddd)" Color.darkGreen Intersect.toList_DotDot
+                , compareDotDot "folding (ddd)" Color.darkBlue Intersect.folding_DotDot
+                , compareDotDot "recursion (ddd)" Color.darkYellow Intersect.recursion_DotDot
                 ]
 
             else
                 []
 
-        unions : Ratio -> List (Result Error (String -> Param))
-        unions ratio =
+        unions : List ({ ratio : Ratio, core : Dict Int Int -> Dict Int Int -> Dict Int Int, section : String } -> Result Error Param)
+        unions =
             if True then
-                [ --   compareCore "library"  ratio  Color.red Dict.union  Dict.union
-                  -- , compareCore "toList"  ratio  Color.green Dict.union  Union.toList
-                  -- , compareCore "folding"  ratio  Color.blue Dict.union  Union.folding,
-                  compareDotDot "library (ddd)" ratio Color.darkRed Dict.union DDD.union
-                , compareDotDot "toList (ddd)" ratio Color.darkGreen Dict.union Union.toList_DotDot
+                [ --   compareCore "library" Color.red Dict.union
+                  -- , compareCore "toList" Color.green Union.toList
+                  -- , compareCore "folding" Color.blue Union.folding,
+                  compareDotDot "library (ddd)" Color.darkRed DDD.union
+                , compareDotDot "toList (ddd)" Color.darkGreen Union.toList_DotDot
 
-                -- , compareDotDot "folding (ddd)"  ratio  Color.darkBlue Dict.union  Union.folding_DotDot
-                -- , compareDotDot "recursion (ddd)"  ratio  Color.darkYellow Dict.union  Union.recursion_DotDot
+                -- , compareDotDot "folding (ddd)" Color.darkBlue Union.folding_DotDot
+                -- , compareDotDot "recursion (ddd)" Color.darkYellow Union.recursion_DotDot
                 ]
 
             else
                 []
     in
-    [ category "intersections" intersections
-    , category "unions" unions
+    [ buildSection "intersection" Dict.intersect intersections
+    , buildSection "union" Dict.union unions
     ]
         |> Result.Extra.combine
         |> Result.map List.concat
 
 
-category : String -> (Ratio -> List (Result Error (String -> Param))) -> Result Error (List Param)
-category label toList =
-    [ ( 100, 1 ), ( 10, 1 ), ( 1, 1 ), ( 1, 10 ), ( 1, 100 ) ]
-        |> List.map
-            (\ratio ->
-                case toList ratio of
-                    [] ->
-                        Ok []
+buildSection : String -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> List ({ ratio : Ratio, core : Dict Int Int -> Dict Int Int -> Dict Int Int, section : String } -> Result Error Param) -> Result Error (List Param)
+buildSection label core list =
+    case list of
+        [] ->
+            Ok []
 
-                    list ->
-                        Result.Extra.combine list
-                            |> Result.map (List.map (\f -> f label))
-            )
-        |> Result.Extra.combine
-        |> Result.map List.concat
+        _ ->
+            [ ( 100, 1 ), ( 10, 1 ), ( 1, 1 ), ( 1, 10 ), ( 1, 100 ) ]
+                |> List.map
+                    (\ratio ->
+                        list
+                            |> List.map (\f -> f { ratio = ratio, core = core, section = label })
+                            |> Result.Extra.combine
+                    )
+                |> Result.Extra.combine
+                |> Result.map List.concat
 
 
-compareCore : String -> Ratio -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error (String -> Param)
+compareCore : String -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> { ratio : Ratio, core : Dict Int Int -> Dict Int Int -> Dict Int Int, section : String } -> Result Error Param
 compareCore =
     compare Dict.toList .core
 
 
-compareDotDot : String -> Ratio -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error (String -> Param)
+compareDotDot : String -> Color -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> { ratio : Ratio, core : Dict Int Int -> Dict Int Int -> Dict Int Int, section : String } -> Result Error Param
 compareDotDot =
     compare DDD.toList .dotdot
 
@@ -477,13 +478,15 @@ compare :
     (dict -> List ( Int, Int ))
     -> (Both Int Int -> dict)
     -> String
-    -> Ratio
     -> Color
-    -> (Dict Int Int -> Dict Int Int -> Dict Int Int)
     -> (dict -> dict -> dict)
-    -> Result Error (String -> Param)
-compare toList selector label (( lratio, rratio ) as ratio) color core op =
+    -> { ratio : Ratio, core : Dict Int Int -> Dict Int Int -> Dict Int Int, section : String }
+    -> Result Error Param
+compare toList selector label color op { ratio, core, section } =
     let
+        ( lratio, rratio ) =
+            ratio
+
         ltest : Both Int Int
         ltest =
             generate 150
@@ -502,42 +505,40 @@ compare toList selector label (( lratio, rratio ) as ratio) color core op =
     in
     if expected == actual then
         Ok
-            (\section ->
-                { section = section
-                , function = label
-                , color = color
-                , ratio = ratio
-                , op =
-                    \size ->
-                        let
-                            lsize : Int
-                            lsize =
-                                size * lratio
+            { section = section
+            , function = label
+            , color = color
+            , ratio = ratio
+            , op =
+                \size ->
+                    let
+                        lsize : Int
+                        lsize =
+                            size * lratio
 
-                            rsize : Int
-                            rsize =
-                                size * rratio
+                        rsize : Int
+                        rsize =
+                            size * rratio
 
-                            rsizeFixed : Int
-                            rsizeFixed =
-                                if rsize == lsize then
-                                    -- Prevent having the exact same size, and thus random seed
-                                    rsize + 1
+                        rsizeFixed : Int
+                        rsizeFixed =
+                            if rsize == lsize then
+                                -- Prevent having the exact same size, and thus random seed
+                                rsize + 1
 
-                                else
-                                    rsize
+                            else
+                                rsize
 
-                            ls : dict
-                            ls =
-                                selector (generate lsize)
+                        ls : dict
+                        ls =
+                            selector (generate lsize)
 
-                            rs : dict
-                            rs =
-                                selector (generate rsizeFixed)
-                        in
-                        Benchmark.LowLevel.operation (\_ -> op ls rs)
-                }
-            )
+                        rs : dict
+                        rs =
+                            selector (generate rsizeFixed)
+                    in
+                    Benchmark.LowLevel.operation (\_ -> op ls rs)
+            }
 
     else
         Err
