@@ -1,4 +1,4 @@
-module Main exposing (Flags, Model, Msg, Times, main)
+module Main exposing (Flags, Model, Msg, main)
 
 import Benchmark.LowLevel exposing (Operation)
 import Browser
@@ -13,6 +13,7 @@ import Element.Input as Input
 import Intersect
 import LinePlot exposing (BoxStats)
 import List.Extra
+import ParamDict exposing (Param, ParamDict, Ratio)
 import Process
 import Random
 import Result.Extra
@@ -25,15 +26,11 @@ type alias Flags =
 
 
 type alias Model =
-    { times : Dict String Times
+    { times : ParamDict (Dict Int BoxStats)
     , errors : List String
     , running : Bool
     , slowBenchmark : Bool
     }
-
-
-type alias Times =
-    Dict String ( Color, Dict Int BoxStats )
 
 
 type alias ParamQueue =
@@ -41,18 +38,6 @@ type alias ParamQueue =
     , size : Int
     , queue : List Param
     }
-
-
-type alias Param =
-    { section : String
-    , key : String
-    , color : Color
-    , op : Int -> Operation
-    }
-
-
-type alias Ratio =
-    ( Int, Int )
 
 
 type Msg
@@ -73,7 +58,7 @@ main =
 
 init : Flags -> ( Model, Cmd Msg )
 init _ =
-    ( { times = Dict.empty
+    ( { times = ParamDict.empty
       , running = False
       , errors = []
       , slowBenchmark = False
@@ -113,22 +98,27 @@ view model =
                 }
             , text "(the ratio (x:y) means that the smallest dict will be of the indicated size, and the other will be 10 or 100 times bigger)"
             ]
-        , if Dict.isEmpty model.times then
+        , if ParamDict.isEmpty model.times then
             Element.none
 
           else
             model.times
-                |> Dict.toList
+                |> ParamDict.toList
+                |> List.Extra.gatherEqualsBy (\( param, _ ) -> ( param.section, param.ratio ))
                 |> List.map
-                    (\( sectionName, sectionTimes ) ->
+                    (\( ( { section, ratio, color }, _ ) as head, tail ) ->
+                        let
+                            ( lratio, rratio ) =
+                                ratio
+                        in
                         column [ spacing 10, alignTop ]
-                            [ el [ Font.bold, Font.size 24 ] <| text sectionName
-                            , sectionTimes
-                                |> Dict.values
+                            [ el [ Font.bold, Font.size 24 ] <| text <| section ++ " (" ++ String.fromInt lratio ++ ":" ++ String.fromInt rratio ++ ")"
+                            , (head :: tail)
+                                |> List.map (\( _, times ) -> ( color, times ))
                                 |> LinePlot.view
                                 |> Element.html
                                 |> el []
-                            , viewTable sectionTimes
+                            , viewTable (head :: tail)
                             ]
                     )
                 |> wrappedRow [ spacing 10 ]
@@ -138,14 +128,13 @@ view model =
         ]
 
 
-viewTable : Times -> Element Msg
+viewTable : List ( Param, Dict Int BoxStats ) -> Element Msg
 viewTable times =
     let
         data : List ( Int, Dict String BoxStats )
         data =
             times
-                |> Dict.toList
-                |> List.concatMap (\( key, ( _, dict ) ) -> List.map (\( size, stats ) -> ( size, key, stats )) (Dict.toList dict))
+                |> List.concatMap (\( { function }, dict ) -> List.map (\( size, stats ) -> ( size, function, stats )) (Dict.toList dict))
                 |> List.Extra.gatherEqualsBy (\( size, _, _ ) -> size)
                 |> List.map
                     (\( ( size, _, _ ) as head, tail ) ->
@@ -158,9 +147,7 @@ viewTable times =
 
         keys : List ( String, Color )
         keys =
-            times
-                |> Dict.toList
-                |> List.map (\( key, ( color, _ ) ) -> ( key, color ))
+            List.map (\( param, _ ) -> ( param.function, param.color )) times
 
         header : String -> Maybe Color -> Element msg
         header label color =
@@ -236,31 +223,9 @@ update msg model =
     in
     case msg of
         Run ->
-            let
-                sectionToQueue :
-                    ( String, Dict String ( Color, Int -> Operation ) )
-                    -> List Param
-                sectionToQueue ( section, ops ) =
-                    ops
-                        |> Dict.toList
-                        |> List.map
-                            (\( key, ( color, op ) ) ->
-                                { section = section
-                                , key = key
-                                , color = color
-                                , op = op
-                                }
-                            )
-            in
             { model | running = True }
                 |> withCmd
-                    (case
-                        Result.map
-                            (Dict.toList
-                                >> List.concatMap sectionToQueue
-                            )
-                            operations
-                     of
+                    (case operations of
                         Ok (head :: tail) ->
                             let
                                 queue : ParamQueue
@@ -286,16 +251,15 @@ update msg model =
                     else
                         incrementSize param.size <= maxSize // 3 && (times.median < 5)
 
-                newTimes : Dict String Times
+                newTimes : ParamDict (Dict Int BoxStats)
                 newTimes =
-                    Dict.update param.current.section
-                        (Maybe.withDefault Dict.empty
-                            >> Dict.update
-                                param.current.key
-                                (\v ->
-                                    Just ( param.current.color, Dict.insert param.size times (Maybe.withDefault Dict.empty <| Maybe.map Tuple.second v) )
-                                )
-                            >> Just
+                    ParamDict.update
+                        param.current
+                        (\v ->
+                            v
+                                |> Maybe.withDefault Dict.empty
+                                |> Dict.insert param.size times
+                                |> Just
                         )
                         model.times
             in
@@ -341,7 +305,7 @@ update msg model =
 
 initialSize : Int
 initialSize =
-    100
+    10
 
 
 maxSize : Int
@@ -432,10 +396,10 @@ generate size =
         |> Tuple.first
 
 
-operations : Result Error (Dict String (Dict String ( Color, Int -> Operation )))
+operations : Result Error (List Param)
 operations =
     let
-        intersections : Ratio -> List (Result Error ( String, ( Color, Int -> Operation ) ))
+        intersections : Ratio -> List (Result Error (String -> Param))
         intersections ratio =
             if False then
                 [ --   compareCore "library"  ratio  Color.red Dict.intersect  Dict.intersect
@@ -450,7 +414,7 @@ operations =
             else
                 []
 
-        unions : Ratio -> List (Result Error ( String, ( Color, Int -> Operation ) ))
+        unions : Ratio -> List (Result Error (String -> Param))
         unions ratio =
             if True then
                 [ --   compareCore "library"  ratio  Color.red Dict.union  Dict.union
@@ -466,26 +430,36 @@ operations =
             else
                 []
     in
+    [ category "intersections" intersections
+    , category "unions" unions
+    ]
+        |> Result.Extra.combine
+        |> Result.map List.concat
+
+
+category : String -> (Ratio -> List (Result Error (String -> Param))) -> Result Error (List Param)
+category label toList =
     [ ( 100, 1 ), ( 10, 1 ), ( 1, 1 ), ( 1, 10 ), ( 1, 100 ) ]
         |> List.map
-            (\(( lr, rr ) as ratio) ->
-                (intersections ratio ++ unions ratio)
-                    |> Result.Extra.combine
-                    |> Result.map
-                        (Dict.fromList
-                            >> Tuple.pair ("intersection (" ++ String.fromInt lr ++ ":" ++ String.fromInt rr ++ ")")
-                        )
+            (\ratio ->
+                case toList ratio of
+                    [] ->
+                        Ok []
+
+                    list ->
+                        Result.Extra.combine list
+                            |> Result.map (List.map (\f -> f label))
             )
         |> Result.Extra.combine
-        |> Result.map Dict.fromList
+        |> Result.map List.concat
 
 
-compareCore : String -> Ratio -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
+compareCore : String -> Ratio -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Result Error (String -> Param)
 compareCore =
     compare Dict.toList .core
 
 
-compareDotDot : String -> Ratio -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error ( String, ( Color, Int -> Operation ) )
+compareDotDot : String -> Ratio -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Result Error (String -> Param)
 compareDotDot =
     compare DDD.toList .dotdot
 
@@ -507,8 +481,8 @@ compare :
     -> Color
     -> (Dict Int Int -> Dict Int Int -> Dict Int Int)
     -> (dict -> dict -> dict)
-    -> Result Error ( String, ( Color, Int -> Operation ) )
-compare toList selector label ( lratio, rratio ) color core op =
+    -> Result Error (String -> Param)
+compare toList selector label (( lratio, rratio ) as ratio) color core op =
     let
         ltest : Both Int Int
         ltest =
@@ -528,37 +502,41 @@ compare toList selector label ( lratio, rratio ) color core op =
     in
     if expected == actual then
         Ok
-            ( label
-            , ( color
-              , \size ->
-                    let
-                        lsize : Int
-                        lsize =
-                            size * lratio
+            (\section ->
+                { section = section
+                , function = label
+                , color = color
+                , ratio = ratio
+                , op =
+                    \size ->
+                        let
+                            lsize : Int
+                            lsize =
+                                size * lratio
 
-                        rsize : Int
-                        rsize =
-                            size * rratio
+                            rsize : Int
+                            rsize =
+                                size * rratio
 
-                        rsizeFixed : Int
-                        rsizeFixed =
-                            if rsize == lsize then
-                                -- Prevent having the exact same size, and thus random seed
-                                rsize + 1
+                            rsizeFixed : Int
+                            rsizeFixed =
+                                if rsize == lsize then
+                                    -- Prevent having the exact same size, and thus random seed
+                                    rsize + 1
 
-                            else
-                                rsize
+                                else
+                                    rsize
 
-                        ls : dict
-                        ls =
-                            selector (generate lsize)
+                            ls : dict
+                            ls =
+                                selector (generate lsize)
 
-                        rs : dict
-                        rs =
-                            selector (generate rsizeFixed)
-                    in
-                    Benchmark.LowLevel.operation (\_ -> op ls rs)
-              )
+                            rs : dict
+                            rs =
+                                selector (generate rsizeFixed)
+                        in
+                        Benchmark.LowLevel.operation (\_ -> op ls rs)
+                }
             )
 
     else
