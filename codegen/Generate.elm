@@ -28,23 +28,28 @@ main =
             |> CustomDict.withAdditionalDeclarations
                 [ Elm.alias "Param" paramAnnotation |> Elm.exposeWith { exposeConstructor = False, group = Just "Types" }
                 , Elm.alias "Ratio" (Type.tuple Type.int Type.int) |> Elm.exposeWith { exposeConstructor = False, group = Just "Types" }
-                , Elm.alias "Key" keyAnnotation
-                , Elm.fn ( "param", Just (Type.named [] "Param") )
-                    (\param ->
-                        Elm.triple
-                            (Elm.get "section" param)
-                            (Elm.get "ratio" param)
-                            (Elm.get "function" param)
-                    )
-                    |> Elm.withType (Type.function [ Type.named [] "Param" ] keyAnnotation)
-                    |> Elm.declaration "toComparable"
+                , Elm.alias "Key" paramComparableAnnotation
+                , paramToComparable
                 ]
             |> CustomDict.generate
         ]
 
 
-keyAnnotation : Type.Annotation
-keyAnnotation =
+paramToComparable : Elm.Declaration
+paramToComparable =
+    Elm.fn ( "param", Just (Type.named [] "Param") )
+        (\param ->
+            Elm.triple
+                (Elm.get "section" param)
+                (Elm.get "ratio" param)
+                (Elm.get "function" param)
+        )
+        |> Elm.withType (Type.function [ Type.named [] "Param" ] paramComparableAnnotation)
+        |> Elm.declaration "toComparable"
+
+
+paramComparableAnnotation : Type.Annotation
+paramComparableAnnotation =
     Type.triple Type.string (Type.named [] "Ratio") Type.string
 
 
