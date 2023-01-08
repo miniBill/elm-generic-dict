@@ -96,7 +96,7 @@ view model =
                 , label = Input.labelRight [] <| text "Full benchmark (slow!)"
                 , icon = Input.defaultCheckbox
                 }
-            , text "(the ratio (x:y) means that the smallest dict will be of the indicated size, and the other will be 10 or 100 times bigger)"
+            , text "(the ratio (x:y) means that the smallest dict will be of the indicated size, and the other will be 10 or 30 times bigger)"
             ]
         , if ParamDict.isEmpty model.times then
             Element.none
@@ -444,7 +444,7 @@ buildSection label core list =
             Ok []
 
         _ ->
-            [ ( 100, 1 ), ( 10, 1 ), ( 1, 1 ), ( 1, 10 ), ( 1, 100 ) ]
+            [ ( 30, 1 ), ( 10, 1 ), ( 1, 1 ), ( 1, 10 ), ( 1, 30 ) ]
                 |> List.map
                     (\ratio ->
                         list
