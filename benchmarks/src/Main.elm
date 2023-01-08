@@ -249,7 +249,7 @@ update msg model =
                         incrementSize param.size <= maxSize
 
                     else
-                        incrementSize param.size <= maxSize // 3 && (times.median < 5)
+                        incrementSize param.size <= maxSize && (times.median < 5)
 
                 newTimes : ParamDict (Dict Int BoxStats)
                 newTimes =
