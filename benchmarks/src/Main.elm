@@ -305,12 +305,12 @@ update msg model =
 
 initialSize : Int
 initialSize =
-    10
+    300
 
 
 maxSize : Int
 maxSize =
-    1000
+    3000
 
 
 incrementSize : Int -> Int
