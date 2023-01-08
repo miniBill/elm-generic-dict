@@ -299,10 +299,10 @@ update msg model =
                 continue : Bool
                 continue =
                     if model.slowBenchmark then
-                        incrementSize param.size <= maxSize && (times.median < 30)
+                        incrementSize param.size <= maxSize && (times.median < 20)
 
                     else
-                        incrementSize param.size <= maxSize && (times.median < 5)
+                        incrementSize param.size <= maxSize && (times.median < 6)
 
                 newTimes : ParamDict (Dict Int BoxStats)
                 newTimes =
