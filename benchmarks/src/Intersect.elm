@@ -320,10 +320,10 @@ recursion_thrice_DotDot l r =
 
                         Just ( rkey, _, rtail ) ->
                             if lkey < rkey then
-                                go dacc lleft (unpackWhileDroppingLT lkey rtail)
+                                go dacc (unpackWhileDroppingLT rkey ltail) rleft
 
                             else if lkey > rkey then
-                                go dacc (unpackWhileDroppingLT rkey ltail) rleft
+                                go dacc lleft (unpackWhileDroppingLT lkey rtail)
 
                             else
                                 go (DDD.insert lkey lvalue dacc) (unpack ltail) (unpack rtail)
