@@ -74,58 +74,92 @@ subscriptions _ =
 
 view : Model -> Element Msg
 view model =
-    column
-        [ padding 10
-        , spacing 10
-        ]
-        [ wrappedRow [ spacing 10 ]
-            [ if model.running then
-                button [ Background.color <| Element.rgb 0.8 0.8 0.8 ]
-                    { onPress = Nothing
-                    , label = text <| "Running"
-                    }
+    case operations of
+        Err e ->
+            viewError e
 
-              else
-                button []
-                    { onPress = Just Run
-                    , label = text <| "Run"
-                    }
-            , Input.checkbox []
-                { onChange = SlowBenchmark
-                , checked = model.slowBenchmark
-                , label = Input.labelRight [] <| text "Full benchmark (slow!)"
-                , icon = Input.defaultCheckbox
-                }
-            , text "(the ratio (x:y) means that the smallest dict will be of the indicated size, and the other will be 10 or 30 times bigger)"
+        Ok _ ->
+            column
+                [ padding 10
+                , spacing 10
+                ]
+                [ wrappedRow [ spacing 10 ]
+                    [ if model.running then
+                        button [ Background.color <| Element.rgb 0.8 0.8 0.8 ]
+                            { onPress = Nothing
+                            , label = text <| "Running"
+                            }
+
+                      else
+                        button []
+                            { onPress = Just Run
+                            , label = text <| "Run"
+                            }
+                    , Input.checkbox []
+                        { onChange = SlowBenchmark
+                        , checked = model.slowBenchmark
+                        , label = Input.labelRight [] <| text "Full benchmark (slow!)"
+                        , icon = Input.defaultCheckbox
+                        }
+                    , text "(the ratio (x:y) means that the smallest dict will be of the indicated size, and the other will be 10 or 30 times bigger)"
+                    ]
+                , if ParamDict.isEmpty model.times then
+                    Element.none
+
+                  else
+                    model.times
+                        |> ParamDict.toList
+                        |> List.Extra.gatherEqualsBy (\( param, _ ) -> ( param.section, param.ratio ))
+                        |> List.map
+                            (\( ( { section, ratio }, _ ) as head, tail ) ->
+                                let
+                                    ( lratio, rratio ) =
+                                        ratio
+                                in
+                                column [ spacing 10, alignTop ]
+                                    [ el [ Font.bold, Font.size 24 ] <| text <| section ++ " (" ++ String.fromInt lratio ++ ":" ++ String.fromInt rratio ++ ")"
+                                    , (head :: tail)
+                                        |> List.map (\( { color }, times ) -> ( color, times ))
+                                        |> LinePlot.view
+                                        |> Element.html
+                                        |> el []
+                                    , viewTable (head :: tail)
+                                    ]
+                            )
+                        |> wrappedRow [ spacing 10 ]
+                , model.errors
+                    |> List.map (\err -> el [] <| text err)
+                    |> column [ spacing 10 ]
+                ]
+
+
+viewError : Error -> Element Msg
+viewError { label, left, right, expected, actual } =
+    let
+        viewPair : ( Int, Int ) -> Element msg
+        viewPair ( k, v ) =
+            if k == v then
+                text <| String.fromInt k
+
+            else
+                text <| String.fromInt k ++ "," ++ String.fromInt v
+
+        viewList : String -> List ( Int, Int ) -> List (Element msg)
+        viewList listLabel lst =
+            [ el [ Font.bold ] (text listLabel)
+            , lst
+                |> List.map viewPair
+                |> List.intersperse (text " ")
+                |> wrappedRow []
             ]
-        , if ParamDict.isEmpty model.times then
-            Element.none
-
-          else
-            model.times
-                |> ParamDict.toList
-                |> List.Extra.gatherEqualsBy (\( param, _ ) -> ( param.section, param.ratio ))
-                |> List.map
-                    (\( ( { section, ratio }, _ ) as head, tail ) ->
-                        let
-                            ( lratio, rratio ) =
-                                ratio
-                        in
-                        column [ spacing 10, alignTop ]
-                            [ el [ Font.bold, Font.size 24 ] <| text <| section ++ " (" ++ String.fromInt lratio ++ ":" ++ String.fromInt rratio ++ ")"
-                            , (head :: tail)
-                                |> List.map (\( { color }, times ) -> ( color, times ))
-                                |> LinePlot.view
-                                |> Element.html
-                                |> el []
-                            , viewTable (head :: tail)
-                            ]
-                    )
-                |> wrappedRow [ spacing 10 ]
-        , model.errors
-            |> List.map (\err -> el [] <| text err)
-            |> column [ spacing 10 ]
-        ]
+    in
+    column [ spacing 10 ]
+        (text label
+            :: viewList "left" (Dict.toList left)
+            ++ viewList "right" (Dict.toList right)
+            ++ viewList "expected" expected
+            ++ viewList "actual" actual
+        )
 
 
 viewTable : List ( Param, Dict Int BoxStats ) -> Element Msg
