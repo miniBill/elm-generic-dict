@@ -310,7 +310,7 @@ initialSize =
 
 maxSize : Int
 maxSize =
-    3000
+    30000
 
 
 incrementSize : Int -> Int
