@@ -280,7 +280,7 @@ update msg model =
                 continue : Bool
                 continue =
                     if model.slowBenchmark then
-                        incrementSize param.size <= maxSize
+                        incrementSize param.size <= maxSize && (times.median < 30)
 
                     else
                         incrementSize param.size <= maxSize && (times.median < 5)
