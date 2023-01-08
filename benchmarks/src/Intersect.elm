@@ -152,8 +152,8 @@ recursion_twice_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.D
 recursion_twice_DotDot l r =
     let
         unpack : List (QueueNode comparable v) -> Maybe ( comparable, List (QueueNode comparable v) )
-        unpack lst =
-            case lst of
+        unpack queue =
+            case queue of
                 [] ->
                     Nothing
 
@@ -165,6 +165,15 @@ recursion_twice_DotDot l r =
                         Tree DDD.RBEmpty_elm_builtin ->
                             unpack t
 
+                        Tree (DDD.RBNode_elm_builtin _ key _ DDD.RBEmpty_elm_builtin DDD.RBEmpty_elm_builtin) ->
+                            unpack (Key key :: t)
+
+                        Tree (DDD.RBNode_elm_builtin _ key _ DDD.RBEmpty_elm_builtin childGT) ->
+                            unpack (Key key :: Tree childGT :: t)
+
+                        Tree (DDD.RBNode_elm_builtin _ key _ childLT DDD.RBEmpty_elm_builtin) ->
+                            unpack (Tree childLT :: Key key :: t)
+
                         Tree (DDD.RBNode_elm_builtin _ key _ childLT childGT) ->
                             unpack (Tree childLT :: Key key :: Tree childGT :: t)
 
@@ -173,15 +182,19 @@ recursion_twice_DotDot l r =
                             unpack (Tree c :: t)
 
         unpackWhileDroppingLT : comparable -> List (QueueNode comparable v) -> Maybe ( comparable, List (QueueNode comparable v) )
-        unpackWhileDroppingLT compareKey lst =
-            case lst of
+        unpackWhileDroppingLT compareKey queue =
+            case queue of
                 [] ->
                     Nothing
 
                 h :: t ->
                     case h of
                         Key v ->
-                            Just ( v, t )
+                            if v < compareKey then
+                                unpackWhileDroppingLT compareKey t
+
+                            else
+                                Just ( v, t )
 
                         Tree DDD.RBEmpty_elm_builtin ->
                             unpackWhileDroppingLT compareKey t
