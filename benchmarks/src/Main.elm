@@ -443,6 +443,8 @@ operations =
                 , compareDotDot "toList (ddd)" Color.darkGreen Intersect.toList_DotDot
                 , compareDotDot "folding (ddd)" Color.darkBlue Intersect.folding_DotDot
                 , compareDotDot "recursion (ddd)" Color.darkYellow Intersect.recursion_DotDot
+                , compareDotDot "recursion² (ddd)" Color.darkGray Intersect.recursion_twice_DotDot
+                , compareDotDot "recursion²[s] (ddd)" Color.darkGray Intersect.recursion_twice_short_DotDot
                 ]
 
             else
