@@ -148,113 +148,14 @@ type QueueNode comparable v
     | Tree (DDD.Dict comparable v)
 
 
-recursion_twice_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
-recursion_twice_DotDot l r =
-    let
-        unpack : List (QueueNode comparable v) -> Maybe ( comparable, v, List (QueueNode comparable v) )
-        unpack queue =
-            case queue of
-                [] ->
-                    Nothing
-
-                h :: t ->
-                    case h of
-                        KeyValue k v ->
-                            Just ( k, v, t )
-
-                        Tree DDD.RBEmpty_elm_builtin ->
-                            unpack t
-
-                        Tree (DDD.RBNode_elm_builtin _ key value childLT childGT) ->
-                            unpack (Tree childLT :: KeyValue key value :: Tree childGT :: t)
-
-                        Tree (DDD.RBBlackMissing_elm_builtin c) ->
-                            -- This doesn't happen in practice, performance is irrelevant
-                            unpack (Tree c :: t)
-
-        unpackWhileDroppingLT : comparable -> List (QueueNode comparable v) -> Maybe ( comparable, List (QueueNode comparable v) )
-        unpackWhileDroppingLT compareKey queue =
-            case queue of
-                [] ->
-                    Nothing
-
-                h :: t ->
-                    case h of
-                        KeyValue v _ ->
-                            if v < compareKey then
-                                unpackWhileDroppingLT compareKey t
-
-                            else
-                                Just ( v, t )
-
-                        Tree DDD.RBEmpty_elm_builtin ->
-                            unpackWhileDroppingLT compareKey t
-
-                        Tree (DDD.RBNode_elm_builtin _ key value childLT childGT) ->
-                            if key < compareKey then
-                                unpackWhileDroppingLT compareKey (Tree childGT :: t)
-
-                            else if key == compareKey then
-                                unpackWhileDroppingLT compareKey (KeyValue key value :: Tree childGT :: t)
-
-                            else
-                                unpackWhileDroppingLT compareKey (Tree childLT :: KeyValue key value :: Tree childGT :: t)
-
-                        Tree (DDD.RBBlackMissing_elm_builtin c) ->
-                            -- This doesn't happen in practice, performance is irrelevant
-                            unpackWhileDroppingLT compareKey (Tree c :: t)
-
-        go : ( DDD.Dict comparable v, List (QueueNode comparable v) ) -> DDD.Dict comparable v -> ( DDD.Dict comparable v, List (QueueNode comparable v) )
-        go (( dacc, rleft ) as acc) lnode =
-            case lnode of
-                DDD.RBEmpty_elm_builtin ->
-                    acc
-
-                DDD.RBBlackMissing_elm_builtin c ->
-                    go acc c
-
-                DDD.RBNode_elm_builtin _ lkey lvalue childLT childGT ->
-                    case unpack rleft of
-                        Nothing ->
-                            acc
-
-                        Just ( rhead, rheadvalue, rtail ) ->
-                            if rhead > lkey then
-                                -- We can skip the left tree and this node
-                                go acc childGT
-
-                            else if rhead == lkey then
-                                -- We can skip the left tree, and insert this node
-                                go ( DDD.insert lkey lvalue dacc, rtail ) childGT
-
-                            else
-                                let
-                                    (( daccAL, rleftAL ) as afterLeft) =
-                                        go ( dacc, KeyValue rhead rheadvalue :: rtail ) childLT
-                                in
-                                case unpackWhileDroppingLT lkey rleftAL of
-                                    Nothing ->
-                                        afterLeft
-
-                                    Just ( rheadAL, rtailAL ) ->
-                                        if rheadAL == lkey then
-                                            go ( DDD.insert lkey lvalue daccAL, rtailAL ) childGT
-
-                                        else
-                                            go afterLeft childGT
-    in
-    go ( DDD.empty, [ Tree r ] ) l
-        |> Tuple.first
-
-
-type alias State comparable v =
+type alias QueueState comparable v =
     Maybe ( comparable, v, List (QueueNode comparable v) )
 
 
-recursion_thrice_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
-recursion_thrice_DotDot l r =
+recursion_twice_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
+recursion_twice_DotDot l r =
     let
-        unpack : List (QueueNode comparable v) -> State comparable v
+        unpack : List (QueueNode comparable v) -> QueueState comparable v
         unpack queue =
             case queue of
                 [] ->
@@ -265,17 +166,20 @@ recursion_thrice_DotDot l r =
                         KeyValue k v ->
                             Just ( k, v, t )
 
-                        Tree DDD.RBEmpty_elm_builtin ->
-                            unpack t
+                        Tree (DDD.RBNode_elm_builtin _ key value DDD.RBEmpty_elm_builtin childGT) ->
+                            Just ( key, value, Tree childGT :: t )
 
                         Tree (DDD.RBNode_elm_builtin _ key value childLT childGT) ->
                             unpack (Tree childLT :: KeyValue key value :: Tree childGT :: t)
+
+                        Tree DDD.RBEmpty_elm_builtin ->
+                            unpack t
 
                         Tree (DDD.RBBlackMissing_elm_builtin c) ->
                             -- This doesn't happen in practice, performance is irrelevant
                             unpack (Tree c :: t)
 
-        unpackWhileDroppingLT : comparable -> List (QueueNode comparable v) -> State comparable v
+        unpackWhileDroppingLT : comparable -> List (QueueNode comparable v) -> QueueState comparable v
         unpackWhileDroppingLT compareKey queue =
             case queue of
                 [] ->
@@ -290,8 +194,12 @@ recursion_thrice_DotDot l r =
                             else
                                 Just ( k, v, t )
 
-                        Tree DDD.RBEmpty_elm_builtin ->
-                            unpackWhileDroppingLT compareKey t
+                        Tree (DDD.RBNode_elm_builtin _ key value DDD.RBEmpty_elm_builtin childGT) ->
+                            if key < compareKey then
+                                unpackWhileDroppingLT compareKey (Tree childGT :: t)
+
+                            else
+                                Just ( key, value, Tree childGT :: t )
 
                         Tree (DDD.RBNode_elm_builtin _ key value childLT childGT) ->
                             if key < compareKey then
@@ -303,9 +211,94 @@ recursion_thrice_DotDot l r =
                             else
                                 unpackWhileDroppingLT compareKey (Tree childLT :: KeyValue key value :: Tree childGT :: t)
 
+                        Tree DDD.RBEmpty_elm_builtin ->
+                            unpackWhileDroppingLT compareKey t
+
                         Tree (DDD.RBBlackMissing_elm_builtin c) ->
                             -- This doesn't happen in practice, performance is irrelevant
                             unpackWhileDroppingLT compareKey (Tree c :: t)
+
+        go : DDD.Dict comparable v -> QueueState comparable v -> QueueState comparable v -> DDD.Dict comparable v
+        go dacc lleft rleft =
+            case lleft of
+                Nothing ->
+                    dacc
+
+                Just ( lkey, lvalue, ltail ) ->
+                    case rleft of
+                        Nothing ->
+                            dacc
+
+                        Just ( rkey, _, rtail ) ->
+                            if lkey < rkey then
+                                go dacc (unpackWhileDroppingLT rkey ltail) rleft
+
+                            else if lkey > rkey then
+                                go dacc lleft (unpackWhileDroppingLT lkey rtail)
+
+                            else
+                                go (DDD.insert lkey lvalue dacc) (unpack ltail) (unpack rtail)
+    in
+    go DDD.empty (unpack [ Tree l ]) (unpack [ Tree r ])
+
+
+type alias State comparable v =
+    Maybe ( comparable, v, List (DDD.Dict comparable v) )
+
+
+recursion_thrice_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
+recursion_thrice_DotDot l r =
+    let
+        unpack : List (DDD.Dict comparable v) -> State comparable v
+        unpack queue =
+            case queue of
+                [] ->
+                    Nothing
+
+                h :: t ->
+                    case h of
+                        DDD.RBNode_elm_builtin _ key value DDD.RBEmpty_elm_builtin childGT ->
+                            Just ( key, value, childGT :: t )
+
+                        DDD.RBNode_elm_builtin color key value childLT childGT ->
+                            unpack (childLT :: DDD.RBNode_elm_builtin color key value DDD.RBEmpty_elm_builtin childGT :: t)
+
+                        DDD.RBEmpty_elm_builtin ->
+                            unpack t
+
+                        DDD.RBBlackMissing_elm_builtin c ->
+                            -- This doesn't happen in practice, performance is irrelevant
+                            unpack (c :: t)
+
+        unpackWhileDroppingLT : comparable -> List (DDD.Dict comparable v) -> State comparable v
+        unpackWhileDroppingLT compareKey queue =
+            case queue of
+                [] ->
+                    Nothing
+
+                h :: t ->
+                    case h of
+                        DDD.RBNode_elm_builtin color key value childLT childGT ->
+                            if key < compareKey then
+                                unpackWhileDroppingLT compareKey (childGT :: t)
+
+                            else if key == compareKey then
+                                Just ( key, value, childGT :: t )
+
+                            else
+                                case childLT of
+                                    DDD.RBEmpty_elm_builtin ->
+                                        Just ( key, value, childGT :: t )
+
+                                    _ ->
+                                        unpackWhileDroppingLT compareKey (childLT :: DDD.RBNode_elm_builtin color key value DDD.RBEmpty_elm_builtin childGT :: t)
+
+                        DDD.RBEmpty_elm_builtin ->
+                            unpackWhileDroppingLT compareKey t
+
+                        DDD.RBBlackMissing_elm_builtin c ->
+                            -- This doesn't happen in practice, performance is irrelevant
+                            unpackWhileDroppingLT compareKey (c :: t)
 
         go : DDD.Dict comparable v -> State comparable v -> State comparable v -> DDD.Dict comparable v
         go dacc lleft rleft =
@@ -328,4 +321,4 @@ recursion_thrice_DotDot l r =
                             else
                                 go (DDD.insert lkey lvalue dacc) (unpack ltail) (unpack rtail)
     in
-    go DDD.empty (unpack [ Tree l ]) (unpack [ Tree r ])
+    go DDD.empty (unpack [ l ]) (unpack [ r ])
