@@ -368,7 +368,7 @@ maxTimeSlow =
 
 initialSize : Int
 initialSize =
-    300
+    10
 
 
 maxSize : Int
@@ -474,23 +474,25 @@ operations =
     let
         intersections : List (Args -> Result Error Param)
         intersections =
-            if True then
+            if False then
                 [ --     compareCore "library" Color.red Dict.intersect
                   -- , compareCore "toList" Color.green Intersect.toList
                   -- , compareCore "folding" Color.blue Intersect.folding
                   -- ,
-                  --   compareDotDot "library (ddd)" Color.darkRed DDD.intersect
-                  -- , compareDotDot "toList (ddd)" Color.darkBrown Intersect.toList_DotDot
-                  -- , compareDotDot "folding (ddd)" Color.darkBlue Intersect.folding_DotDot
-                  -- , compareDotDot "recursion (ddd)" Color.darkBrown Intersect.recursion_DotDot
-                  --  , compareDotDot "recursion² (ddd)" Color.darkGray Intersect.recursion_twice_DotDot
-                  --,
-                  compareDotDot "recursion³ (ddd)" Color.darkGreen Intersect.recursion_thrice_DotDot
+                  compareDotDot "library (ddd)" Color.darkRed DDD.intersect
+
+                -- , compareDotDot "toList (ddd)" Color.darkBrown Intersect.toList_DotDot
+                -- , compareDotDot "folding (ddd)" Color.darkBlue Intersect.folding_DotDot
+                -- , compareDotDot "recursion (ddd)" Color.darkBrown Intersect.recursion_DotDot
+                --  , compareDotDot "recursion² (ddd)" Color.darkGray Intersect.recursion_twice_DotDot
+                , compareDotDot "recursion³ (ddd)" Color.darkGreen Intersect.recursion_thrice_DotDot
                 , compareDotDot "recursion³ + fromArray (ddd)" Color.darkYellow Intersect.recursion_thrice_fromArray_DotDot
                 ]
 
             else
-                []
+                [ compareDotDot "library" Color.darkRed DDD.intersect
+                , compareDotDot "alternative " Color.darkYellow Intersect.recursion_thrice_fromArray_DotDot
+                ]
 
         unions : List (Args -> Result Error Param)
         unions =
