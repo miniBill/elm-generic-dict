@@ -465,15 +465,19 @@ operations =
         intersections : List (Args -> Result Error Param)
         intersections =
             if True then
-                [ --   compareCore "library" Color.red Dict.intersect
+                [ --     compareCore "library" Color.red Dict.intersect
                   -- , compareCore "toList" Color.green Intersect.toList
-                  -- , compareCore "folding" Color.blue Intersect.folding,
+                  -- , compareCore "folding" Color.blue Intersect.folding
+                  -- ,
                   compareDotDot "library (ddd)" Color.darkRed DDD.intersect
-                , compareDotDot "toList (ddd)" Color.darkGreen Intersect.toList_DotDot
+
+                -- , compareDotDot "toList (ddd)" Color.darkBrown Intersect.toList_DotDot
                 , compareDotDot "folding (ddd)" Color.darkBlue Intersect.folding_DotDot
-                , compareDotDot "recursion (ddd)" Color.darkYellow Intersect.recursion_DotDot
-                , compareDotDot "recursion² (ddd)" Color.darkGray Intersect.recursion_twice_DotDot
-                , compareDotDot "recursion³ (ddd)" Color.darkGray Intersect.recursion_thrice_DotDot
+
+                -- , compareDotDot "recursion (ddd)" Color.darkBrown Intersect.recursion_DotDot
+                --  , compareDotDot "recursion² (ddd)" Color.darkGray Intersect.recursion_twice_DotDot
+                , compareDotDot "recursion³ (ddd)" Color.darkGreen Intersect.recursion_thrice_DotDot
+                , compareDotDot "recursion³ + fromArray (ddd)" Color.darkYellow Intersect.recursion_thrice_fromArray_DotDot
                 ]
 
             else
@@ -481,11 +485,12 @@ operations =
 
         unions : List (Args -> Result Error Param)
         unions =
-            if True then
-                [ --   compareCore "library" Color.red Dict.union
-                  -- , compareCore "toList" Color.green Union.toList
-                  -- , compareCore "folding" Color.blue Union.folding,
-                  compareDotDot "library (ddd)" Color.darkRed DDD.union
+            if False then
+                [ compareCore "library" Color.red Dict.union
+                , compareCore "toList" Color.green Union.toList
+
+                -- , compareCore "folding" Color.blue Union.folding
+                , compareDotDot "library (ddd)" Color.darkRed DDD.union
                 , compareDotDot "toList (ddd)" Color.darkGreen Union.toList_DotDot
 
                 -- , compareDotDot "folding (ddd)" Color.darkBlue Union.folding_DotDot

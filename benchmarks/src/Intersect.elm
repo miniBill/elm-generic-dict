@@ -1,5 +1,6 @@
-module Intersect exposing (folding, folding_DotDot, recursion_DotDot, recursion_thrice_DotDot, recursion_twice_DotDot, toList, toList_DotDot)
+module Intersect exposing (folding, folding_DotDot, recursion_DotDot, recursion_thrice_DotDot, recursion_thrice_fromArray_DotDot, recursion_twice_DotDot, toList, toList_DotDot)
 
+import Array exposing (Array)
 import Dict exposing (Dict)
 import DictDotDot as DDD
 import List.Extra
@@ -322,3 +323,89 @@ recursion_thrice_DotDot l r =
                                 go (DDD.insert lkey lvalue dacc) (unpack ltail) (unpack rtail)
     in
     go DDD.empty (unpack [ l ]) (unpack [ r ])
+
+
+recursion_thrice_fromArray_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
+recursion_thrice_fromArray_DotDot l r =
+    let
+        unpack : List (DDD.Dict comparable v) -> State comparable v
+        unpack queue =
+            case queue of
+                [] ->
+                    Nothing
+
+                h :: t ->
+                    case h of
+                        DDD.RBNode_elm_builtin _ key value DDD.RBEmpty_elm_builtin childGT ->
+                            Just ( key, value, childGT :: t )
+
+                        DDD.RBNode_elm_builtin color key value childLT childGT ->
+                            unpack (childLT :: DDD.RBNode_elm_builtin color key value DDD.RBEmpty_elm_builtin childGT :: t)
+
+                        DDD.RBEmpty_elm_builtin ->
+                            unpack t
+
+                        DDD.RBBlackMissing_elm_builtin c ->
+                            -- This doesn't happen in practice, performance is irrelevant
+                            unpack (c :: t)
+
+        unpackWhileDroppingLT : comparable -> List (DDD.Dict comparable v) -> State comparable v
+        unpackWhileDroppingLT compareKey queue =
+            case queue of
+                [] ->
+                    Nothing
+
+                h :: t ->
+                    case h of
+                        DDD.RBNode_elm_builtin color key value childLT childGT ->
+                            if key < compareKey then
+                                unpackWhileDroppingLT compareKey (childGT :: t)
+
+                            else if key == compareKey then
+                                Just ( key, value, childGT :: t )
+
+                            else
+                                case childLT of
+                                    DDD.RBEmpty_elm_builtin ->
+                                        Just ( key, value, childGT :: t )
+
+                                    _ ->
+                                        unpackWhileDroppingLT compareKey (childLT :: DDD.RBNode_elm_builtin color key value DDD.RBEmpty_elm_builtin childGT :: t)
+
+                        DDD.RBEmpty_elm_builtin ->
+                            unpackWhileDroppingLT compareKey t
+
+                        DDD.RBBlackMissing_elm_builtin c ->
+                            -- This doesn't happen in practice, performance is irrelevant
+                            unpackWhileDroppingLT compareKey (c :: t)
+
+        go : Array ( comparable, v ) -> State comparable v -> State comparable v -> Array ( comparable, v )
+        go dacc lleft rleft =
+            case lleft of
+                Nothing ->
+                    dacc
+
+                Just ( lkey, lvalue, ltail ) ->
+                    case rleft of
+                        Nothing ->
+                            dacc
+
+                        Just ( rkey, _, rtail ) ->
+                            if lkey < rkey then
+                                go dacc (unpackWhileDroppingLT rkey ltail) rleft
+
+                            else if lkey > rkey then
+                                go dacc lleft (unpackWhileDroppingLT lkey rtail)
+
+                            else
+                                go (Array.push ( lkey, lvalue ) dacc) (unpack ltail) (unpack rtail)
+    in
+    go Array.empty (unpack [ l ]) (unpack [ r ])
+        |> fromSortedArray
+
+
+fromSortedArray : Array ( comparable, v ) -> DDD.Dict comparable v
+fromSortedArray arr =
+    arr
+        |> Array.toList
+        |> DDD.fromList
