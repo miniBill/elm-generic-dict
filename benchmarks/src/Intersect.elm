@@ -415,12 +415,14 @@ fromSortedArray arr =
         redLayer =
             floor (logBase 2 (toFloat len))
 
+        go : Int -> Int -> Int -> DDD.Dict comparable v
         go layer fromIncluded toExcluded =
             if fromIncluded >= toExcluded then
                 DDD.RBEmpty_elm_builtin
 
             else
                 let
+                    mid : Int
                     mid =
                         fromIncluded + (toExcluded - fromIncluded) // 2
                 in
