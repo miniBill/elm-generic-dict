@@ -299,10 +299,10 @@ update msg model =
                 continue : Bool
                 continue =
                     if model.slowBenchmark then
-                        incrementSize param.size <= maxSize && (times.median < 20)
+                        incrementSize param.size <= maxSize && (times.median < maxTimeSlow)
 
                     else
-                        incrementSize param.size <= maxSize && (times.median < 6)
+                        incrementSize param.size <= maxSize && (times.median < maxTimeFast)
 
                 newTimes : ParamDict (Dict Int BoxStats)
                 newTimes =
@@ -354,6 +354,16 @@ update msg model =
         SlowBenchmark slowBenchmark ->
             { model | slowBenchmark = slowBenchmark }
                 |> noCmd
+
+
+maxTimeFast : Float
+maxTimeFast =
+    6
+
+
+maxTimeSlow : Float
+maxTimeSlow =
+    20
 
 
 initialSize : Int
@@ -469,14 +479,13 @@ operations =
                   -- , compareCore "toList" Color.green Intersect.toList
                   -- , compareCore "folding" Color.blue Intersect.folding
                   -- ,
-                  compareDotDot "library (ddd)" Color.darkRed DDD.intersect
-
-                -- , compareDotDot "toList (ddd)" Color.darkBrown Intersect.toList_DotDot
-                , compareDotDot "folding (ddd)" Color.darkBlue Intersect.folding_DotDot
-
-                -- , compareDotDot "recursion (ddd)" Color.darkBrown Intersect.recursion_DotDot
-                --  , compareDotDot "recursion² (ddd)" Color.darkGray Intersect.recursion_twice_DotDot
-                , compareDotDot "recursion³ (ddd)" Color.darkGreen Intersect.recursion_thrice_DotDot
+                  --   compareDotDot "library (ddd)" Color.darkRed DDD.intersect
+                  -- , compareDotDot "toList (ddd)" Color.darkBrown Intersect.toList_DotDot
+                  -- , compareDotDot "folding (ddd)" Color.darkBlue Intersect.folding_DotDot
+                  -- , compareDotDot "recursion (ddd)" Color.darkBrown Intersect.recursion_DotDot
+                  --  , compareDotDot "recursion² (ddd)" Color.darkGray Intersect.recursion_twice_DotDot
+                  --,
+                  compareDotDot "recursion³ (ddd)" Color.darkGreen Intersect.recursion_thrice_DotDot
                 , compareDotDot "recursion³ + fromArray (ddd)" Color.darkYellow Intersect.recursion_thrice_fromArray_DotDot
                 ]
 

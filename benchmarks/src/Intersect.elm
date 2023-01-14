@@ -406,6 +406,39 @@ recursion_thrice_fromArray_DotDot l r =
 
 fromSortedArray : Array ( comparable, v ) -> DDD.Dict comparable v
 fromSortedArray arr =
-    arr
-        |> Array.toList
-        |> DDD.fromList
+    let
+        len : Int
+        len =
+            Array.length arr
+
+        redLayer : Int
+        redLayer =
+            floor (logBase 2 (toFloat len))
+
+        go layer fromIncluded toExcluded =
+            if fromIncluded >= toExcluded then
+                DDD.RBEmpty_elm_builtin
+
+            else
+                let
+                    mid =
+                        fromIncluded + (toExcluded - fromIncluded) // 2
+                in
+                case Array.get mid arr of
+                    Nothing ->
+                        DDD.RBEmpty_elm_builtin
+
+                    Just ( k, v ) ->
+                        DDD.RBNode_elm_builtin
+                            (if layer == redLayer then
+                                DDD.Red
+
+                             else
+                                DDD.Black
+                            )
+                            k
+                            v
+                            (go (layer + 1) fromIncluded mid)
+                            (go (layer + 1) (mid + 1) toExcluded)
+    in
+    go 0 0 len
