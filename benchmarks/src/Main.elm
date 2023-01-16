@@ -487,11 +487,12 @@ operations =
                 --  , compareDotDot "recursion² (ddd)" Color.darkGray Intersect.recursion_twice_DotDot
                 , compareDotDot "recursion³ (ddd)" Color.darkGreen Intersect.recursion_thrice_DotDot
                 , compareDotDot "recursion³ + fromArray (ddd)" Color.darkYellow Intersect.recursion_thrice_fromArray_DotDot
+                , compareDotDot "recursion³ + fromList (ddd)" Color.darkYellow Intersect.recursion_thrice_fromList_DotDot
                 ]
 
             else
                 [ compareDotDot "library" Color.darkRed DDD.intersect
-                , compareDotDot "alternative " Color.darkYellow Intersect.recursion_thrice_fromArray_DotDot
+                , compareDotDot "alternative" Color.darkYellow Intersect.recursion_thrice_fromList_DotDot
                 ]
 
         unions : List (Args -> Result Error Param)
