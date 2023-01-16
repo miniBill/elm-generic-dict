@@ -1,4 +1,4 @@
-module Intersect exposing (folding, folding_DotDot, recursion_DotDot, recursion_thrice_DotDot, recursion_thrice_fromArray_DotDot, recursion_twice_DotDot, toList, toList_DotDot)
+module Intersect exposing (folding, folding_DotDot, recursion_DotDot, recursion_thrice_DotDot, recursion_thrice_fromArray_DotDot, recursion_thrice_fromList_DotDot, recursion_twice_DotDot, toList, toList_DotDot)
 
 import Array exposing (Array)
 import Dict exposing (Dict)
@@ -444,3 +444,128 @@ fromSortedArray arr =
                             (go (layer + 1) (mid + 1) toExcluded)
     in
     go 0 0 len
+
+
+recursion_thrice_fromList_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
+recursion_thrice_fromList_DotDot l r =
+    let
+        unpack : List (DDD.Dict comparable v) -> State comparable v
+        unpack queue =
+            case queue of
+                [] ->
+                    Nothing
+
+                h :: t ->
+                    case h of
+                        DDD.RBNode_elm_builtin _ key value childLT DDD.RBEmpty_elm_builtin ->
+                            Just ( key, value, childLT :: t )
+
+                        DDD.RBNode_elm_builtin color key value childLT childGT ->
+                            unpack (childGT :: DDD.RBNode_elm_builtin color key value childLT DDD.RBEmpty_elm_builtin :: t)
+
+                        DDD.RBEmpty_elm_builtin ->
+                            unpack t
+
+                        DDD.RBBlackMissing_elm_builtin c ->
+                            -- This doesn't happen in practice, performance is irrelevant
+                            unpack (c :: t)
+
+        unpackWhileDroppingGT : comparable -> List (DDD.Dict comparable v) -> State comparable v
+        unpackWhileDroppingGT compareKey queue =
+            case queue of
+                [] ->
+                    Nothing
+
+                h :: t ->
+                    case h of
+                        DDD.RBNode_elm_builtin color key value childLT childGT ->
+                            if key > compareKey then
+                                unpackWhileDroppingGT compareKey (childLT :: t)
+
+                            else if key == compareKey then
+                                Just ( key, value, childLT :: t )
+
+                            else
+                                case childGT of
+                                    DDD.RBEmpty_elm_builtin ->
+                                        Just ( key, value, childLT :: t )
+
+                                    _ ->
+                                        unpackWhileDroppingGT compareKey (childGT :: DDD.RBNode_elm_builtin color key value childLT DDD.RBEmpty_elm_builtin :: t)
+
+                        DDD.RBEmpty_elm_builtin ->
+                            unpackWhileDroppingGT compareKey t
+
+                        DDD.RBBlackMissing_elm_builtin c ->
+                            -- This doesn't happen in practice, performance is irrelevant
+                            unpackWhileDroppingGT compareKey (c :: t)
+
+        go : ( Int, List ( comparable, v ) ) -> State comparable v -> State comparable v -> ( Int, List ( comparable, v ) )
+        go (( dsize, dlist ) as dacc) lleft rleft =
+            case lleft of
+                Nothing ->
+                    dacc
+
+                Just ( lkey, lvalue, ltail ) ->
+                    case rleft of
+                        Nothing ->
+                            dacc
+
+                        Just ( rkey, _, rtail ) ->
+                            if lkey > rkey then
+                                go dacc (unpackWhileDroppingGT rkey ltail) rleft
+
+                            else if lkey < rkey then
+                                go dacc lleft (unpackWhileDroppingGT lkey rtail)
+
+                            else
+                                go ( dsize + 1, ( lkey, lvalue ) :: dlist ) (unpack ltail) (unpack rtail)
+    in
+    go ( 0, [] ) (unpack [ l ]) (unpack [ r ])
+        |> fromSortedList
+
+
+fromSortedList : ( Int, List ( comparable, v ) ) -> DDD.Dict comparable v
+fromSortedList ( len, arr ) =
+    let
+        redLayer : Int
+        redLayer =
+            floor (logBase 2 (toFloat len))
+
+        go : Int -> Int -> Int -> List ( comparable, v ) -> ( DDD.Dict comparable v, List ( comparable, v ) )
+        go layer fromIncluded toExcluded acc =
+            if fromIncluded >= toExcluded then
+                ( DDD.RBEmpty_elm_builtin, acc )
+
+            else
+                let
+                    mid : Int
+                    mid =
+                        fromIncluded + (toExcluded - fromIncluded) // 2
+
+                    ( lchild, accAfterLeft ) =
+                        go (layer + 1) fromIncluded mid acc
+                in
+                case accAfterLeft of
+                    [] ->
+                        ( DDD.RBEmpty_elm_builtin, acc )
+
+                    ( k, v ) :: tail ->
+                        let
+                            ( rchild, accAfterRight ) =
+                                go (layer + 1) (mid + 1) toExcluded tail
+
+                            color : DDD.NColor
+                            color =
+                                if layer == redLayer then
+                                    DDD.Red
+
+                                else
+                                    DDD.Black
+                        in
+                        ( DDD.RBNode_elm_builtin color k v lchild rchild
+                        , accAfterRight
+                        )
+    in
+    go 0 0 len arr
+        |> Tuple.first
