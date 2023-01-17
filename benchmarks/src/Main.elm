@@ -1,4 +1,4 @@
-module Main exposing (Flags, Model, Msg, main)
+module Main exposing (Flags, Model, Msg, RunState, main)
 
 import Benchmark.LowLevel exposing (Operation)
 import Browser
@@ -28,9 +28,15 @@ type alias Flags =
 type alias Model =
     { times : ParamDict (Dict Int BoxStats)
     , errors : List String
-    , running : Bool
+    , state : RunState
     , slowBenchmark : Bool
     }
+
+
+type RunState
+    = NotRunning
+    | Running
+    | Stopping
 
 
 type alias ParamQueue =
@@ -42,6 +48,7 @@ type alias ParamQueue =
 
 type Msg
     = Run
+    | Stop
     | Completed ParamQueue (Result String BoxStats)
     | SlowBenchmark Bool
 
@@ -59,7 +66,7 @@ main =
 init : Flags -> ( Model, Cmd Msg )
 init _ =
     ( { times = ParamDict.empty
-      , running = False
+      , state = NotRunning
       , errors = []
       , slowBenchmark = False
       }
@@ -84,17 +91,24 @@ view model =
                 , spacing 10
                 ]
                 [ wrappedRow [ spacing 10 ]
-                    [ if model.running then
-                        button [ Background.color <| Element.rgb 0.8 0.8 0.8 ]
-                            { onPress = Nothing
-                            , label = text <| "Running"
-                            }
+                    [ case model.state of
+                        Stopping ->
+                            button [ Background.color <| Element.rgb 0.8 0.8 0.8 ]
+                                { onPress = Nothing
+                                , label = text "Stopping..."
+                                }
 
-                      else
-                        button []
-                            { onPress = Just Run
-                            , label = text <| "Run"
-                            }
+                        Running ->
+                            button []
+                                { onPress = Just Stop
+                                , label = text "Stop"
+                                }
+
+                        NotRunning ->
+                            button []
+                                { onPress = Just Run
+                                , label = text "Run"
+                                }
                     , Input.checkbox []
                         { onChange = SlowBenchmark
                         , checked = model.slowBenchmark
@@ -275,8 +289,12 @@ update msg model =
             ( m, c )
     in
     case msg of
+        Stop ->
+            { model | state = Stopping }
+                |> noCmd
+
         Run ->
-            { model | running = True }
+            { model | state = Running }
                 |> withCmd
                     (case operations of
                         Ok (head :: tail) ->
@@ -315,38 +333,46 @@ update msg model =
                                 |> Just
                         )
                         model.times
-            in
-            if continue then
-                { model
-                    | times = newTimes
-                }
-                    |> withCmd
-                        (run
-                            { param | size = incrementSize param.size }
-                        )
 
-            else
-                case param.queue of
-                    [] ->
-                        { model
-                            | running = False
-                            , times = newTimes
-                        }
-                            |> noCmd
+                modelWithTimes : Model
+                modelWithTimes =
+                    { model
+                        | times = newTimes
+                    }
 
-                    qhead :: qtail ->
-                        { model | times = newTimes }
-                            |> withCmd
-                                (run
+                nextParam =
+                    if model.state == Stopping then
+                        Nothing
+
+                    else if continue then
+                        Just { param | size = incrementSize param.size }
+
+                    else
+                        case param.queue of
+                            [] ->
+                                Nothing
+
+                            qhead :: qtail ->
+                                Just
                                     { current = qhead
                                     , size = initialSize
                                     , queue = qtail
                                     }
-                                )
+            in
+            case nextParam of
+                Just np ->
+                    modelWithTimes
+                        |> withCmd (run np)
+
+                Nothing ->
+                    { modelWithTimes
+                        | state = NotRunning
+                    }
+                        |> noCmd
 
         Completed _ (Err err) ->
             { model
-                | running = False
+                | state = NotRunning
                 , errors = err :: model.errors
             }
                 |> noCmd
