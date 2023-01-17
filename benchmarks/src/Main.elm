@@ -384,7 +384,7 @@ update msg model =
 
 maxTimeFast : Float
 maxTimeFast =
-    6
+    4
 
 
 maxTimeSlow : Float
@@ -394,7 +394,7 @@ maxTimeSlow =
 
 initialSize : Int
 initialSize =
-    10
+    100
 
 
 maxSize : Int
