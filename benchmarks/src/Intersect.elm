@@ -448,81 +448,86 @@ fromSortedArray arr =
 
 recursion_thrice_fromList_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
 recursion_thrice_fromList_DotDot l r =
-    let
-        unpack : List (DDD.Dict comparable v) -> State comparable v
-        unpack queue =
-            case queue of
-                [] ->
-                    Nothing
+    intersectFromZipper
+        ( 0, [] )
+        (unconsBiggest [ l ])
+        (unconsBiggest [ r ])
+        |> fromSortedList
 
-                h :: t ->
-                    case h of
-                        DDD.RBNode_elm_builtin _ key value childLT DDD.RBEmpty_elm_builtin ->
-                            Just ( key, value, childLT :: t )
 
-                        DDD.RBNode_elm_builtin color key value childLT childGT ->
-                            unpack (childGT :: DDD.RBNode_elm_builtin color key value childLT DDD.RBEmpty_elm_builtin :: t)
+unconsBiggest : List (DDD.Dict comparable v) -> State comparable v
+unconsBiggest queue =
+    case queue of
+        [] ->
+            Nothing
 
-                        DDD.RBEmpty_elm_builtin ->
-                            unpack t
+        h :: t ->
+            case h of
+                DDD.RBNode_elm_builtin _ key value childLT DDD.RBEmpty_elm_builtin ->
+                    Just ( key, value, childLT :: t )
 
-                        DDD.RBBlackMissing_elm_builtin c ->
-                            -- This doesn't happen in practice, performance is irrelevant
-                            unpack (c :: t)
+                DDD.RBNode_elm_builtin color key value childLT childGT ->
+                    unconsBiggest (childGT :: DDD.RBNode_elm_builtin color key value childLT DDD.RBEmpty_elm_builtin :: t)
 
-        unpackWhileDroppingGT : comparable -> List (DDD.Dict comparable v) -> State comparable v
-        unpackWhileDroppingGT compareKey queue =
-            case queue of
-                [] ->
-                    Nothing
+                DDD.RBEmpty_elm_builtin ->
+                    unconsBiggest t
 
-                h :: t ->
-                    case h of
-                        DDD.RBNode_elm_builtin color key value childLT childGT ->
-                            if key > compareKey then
-                                unpackWhileDroppingGT compareKey (childLT :: t)
+                DDD.RBBlackMissing_elm_builtin c ->
+                    -- This doesn't happen in practice, performance is irrelevant
+                    unconsBiggest (c :: t)
 
-                            else if key == compareKey then
+
+unconsBiggestWhileDroppingGT : comparable -> List (DDD.Dict comparable v) -> State comparable v
+unconsBiggestWhileDroppingGT compareKey queue =
+    case queue of
+        [] ->
+            Nothing
+
+        h :: t ->
+            case h of
+                DDD.RBNode_elm_builtin color key value childLT childGT ->
+                    if key > compareKey then
+                        unconsBiggestWhileDroppingGT compareKey (childLT :: t)
+
+                    else if key == compareKey then
+                        Just ( key, value, childLT :: t )
+
+                    else
+                        case childGT of
+                            DDD.RBEmpty_elm_builtin ->
                                 Just ( key, value, childLT :: t )
 
-                            else
-                                case childGT of
-                                    DDD.RBEmpty_elm_builtin ->
-                                        Just ( key, value, childLT :: t )
+                            _ ->
+                                unconsBiggestWhileDroppingGT compareKey (childGT :: DDD.RBNode_elm_builtin color key value childLT DDD.RBEmpty_elm_builtin :: t)
 
-                                    _ ->
-                                        unpackWhileDroppingGT compareKey (childGT :: DDD.RBNode_elm_builtin color key value childLT DDD.RBEmpty_elm_builtin :: t)
+                DDD.RBEmpty_elm_builtin ->
+                    unconsBiggestWhileDroppingGT compareKey t
 
-                        DDD.RBEmpty_elm_builtin ->
-                            unpackWhileDroppingGT compareKey t
+                DDD.RBBlackMissing_elm_builtin c ->
+                    -- This doesn't happen in practice, performance is irrelevant
+                    unconsBiggestWhileDroppingGT compareKey (c :: t)
 
-                        DDD.RBBlackMissing_elm_builtin c ->
-                            -- This doesn't happen in practice, performance is irrelevant
-                            unpackWhileDroppingGT compareKey (c :: t)
 
-        go : ( Int, List ( comparable, v ) ) -> State comparable v -> State comparable v -> ( Int, List ( comparable, v ) )
-        go (( dsize, dlist ) as dacc) lleft rleft =
-            case lleft of
+intersectFromZipper : ( Int, List ( comparable, v ) ) -> State comparable v -> State comparable v -> ( Int, List ( comparable, v ) )
+intersectFromZipper (( dsize, dlist ) as dacc) lleft rleft =
+    case lleft of
+        Nothing ->
+            dacc
+
+        Just ( lkey, lvalue, ltail ) ->
+            case rleft of
                 Nothing ->
                     dacc
 
-                Just ( lkey, lvalue, ltail ) ->
-                    case rleft of
-                        Nothing ->
-                            dacc
+                Just ( rkey, _, rtail ) ->
+                    if lkey > rkey then
+                        intersectFromZipper dacc (unconsBiggestWhileDroppingGT rkey ltail) rleft
 
-                        Just ( rkey, _, rtail ) ->
-                            if lkey > rkey then
-                                go dacc (unpackWhileDroppingGT rkey ltail) rleft
+                    else if lkey < rkey then
+                        intersectFromZipper dacc lleft (unconsBiggestWhileDroppingGT lkey rtail)
 
-                            else if lkey < rkey then
-                                go dacc lleft (unpackWhileDroppingGT lkey rtail)
-
-                            else
-                                go ( dsize + 1, ( lkey, lvalue ) :: dlist ) (unpack ltail) (unpack rtail)
-    in
-    go ( 0, [] ) (unpack [ l ]) (unpack [ r ])
-        |> fromSortedList
+                    else
+                        intersectFromZipper ( dsize + 1, ( lkey, lvalue ) :: dlist ) (unconsBiggest ltail) (unconsBiggest rtail)
 
 
 fromSortedList : ( Int, List ( comparable, v ) ) -> DDD.Dict comparable v
