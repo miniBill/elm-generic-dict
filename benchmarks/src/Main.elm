@@ -29,7 +29,6 @@ type alias Model =
     { times : ParamDict (Dict Int BoxStats)
     , errors : List String
     , state : RunState
-    , slowBenchmark : Bool
     }
 
 
@@ -50,7 +49,6 @@ type Msg
     = Run
     | Stop
     | Completed ParamQueue (Result String BoxStats)
-    | SlowBenchmark Bool
 
 
 main : Program Flags Model Msg
@@ -68,7 +66,6 @@ init _ =
     ( { times = ParamDict.empty
       , state = NotRunning
       , errors = []
-      , slowBenchmark = False
       }
     , Cmd.none
     )
@@ -109,12 +106,6 @@ view model =
                                 { onPress = Just Run
                                 , label = text "Run"
                                 }
-                    , Input.checkbox []
-                        { onChange = SlowBenchmark
-                        , checked = model.slowBenchmark
-                        , label = Input.labelRight [] <| text "Full benchmark (slow!)"
-                        , icon = Input.defaultCheckbox
-                        }
                     , text "(the ratio (x:y) means that the smallest dict will be of the indicated size, and the other will be 10 or 30 times bigger)"
                     ]
                 , if ParamDict.isEmpty model.times then
@@ -314,14 +305,6 @@ update msg model =
 
         Completed param (Ok times) ->
             let
-                continue : Bool
-                continue =
-                    if model.slowBenchmark then
-                        incrementSize param.size <= maxSize && (times.median < maxTimeSlow)
-
-                    else
-                        incrementSize param.size <= maxSize && (times.median < maxTimeFast)
-
                 newTimes : ParamDict (Dict Int BoxStats)
                 newTimes =
                     ParamDict.update
@@ -340,11 +323,12 @@ update msg model =
                         | times = newTimes
                     }
 
+                nextParam : Maybe ParamQueue
                 nextParam =
                     if model.state == Stopping then
                         Nothing
 
-                    else if continue then
+                    else if incrementSize param.size <= maxSize && (times.median < maxTime) then
                         Just { param | size = incrementSize param.size }
 
                     else
@@ -377,19 +361,10 @@ update msg model =
             }
                 |> noCmd
 
-        SlowBenchmark slowBenchmark ->
-            { model | slowBenchmark = slowBenchmark }
-                |> noCmd
 
-
-maxTimeFast : Float
-maxTimeFast =
+maxTime : Float
+maxTime =
     4
-
-
-maxTimeSlow : Float
-maxTimeSlow =
-    20
 
 
 initialSize : Int
@@ -455,20 +430,20 @@ intersperseInTotal count elem list =
         skip =
             max 1 <| List.length list // (count + 1)
 
-        go : Int -> List a -> List a
-        go cnt left =
+        go : List a -> Int -> List a -> List a
+        go acc cnt left =
             case left of
                 [] ->
-                    []
+                    List.reverse acc
 
                 head :: tail ->
-                    if cnt == 0 then
-                        elem :: go skip left
+                    if cnt <= 0 then
+                        go (elem :: acc) skip left
 
                     else
-                        head :: go (cnt - 1) tail
+                        go (head :: acc) (cnt - 1) tail
     in
-    go skip list
+    go [] skip list
 
 
 {-| `generate n` generates a list of n numbers between 0 and 2n
@@ -552,7 +527,13 @@ buildSection label core list =
             Ok []
 
         _ ->
-            [ ( 30, 1 ), ( 10, 1 ), ( 1, 1 ), ( 1, 10 ), ( 1, 30 ) ]
+            [ ( 1, 0 )
+            , ( 30, 1 )
+            , ( 10, 1 )
+            , ( 1, 1 )
+            , ( 1, 10 )
+            , ( 1, 30 )
+            ]
                 |> List.concatMap
                     (\ratio ->
                         [ OverlapRandom, OverlapFull, OverlapNoneEvenOdd, OverlapNoneLeftLower, OverlapNoneRightLower ]
