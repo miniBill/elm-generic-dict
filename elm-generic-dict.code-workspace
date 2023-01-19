@@ -1,17 +1,20 @@
 {
-	"folders": [
-		{
-			"path": "."
-		},
-		{
-			"path": "codegen"
-		},
-		{
-			"path": "review"
-		},
-		{
-			"path": "benchmarks"
-		}
-	],
-	"settings": {}
+  "folders": [
+    {
+      "path": "."
+    },
+    {
+      "path": "codegen"
+    },
+    {
+      "path": "review"
+    },
+    {
+      "path": "benchmarks"
+    },
+    {
+      "path": "benchmarks/review"
+    }
+  ],
+  "settings": {}
 }
