@@ -465,15 +465,18 @@ generate size =
 type alias Args =
     { overlap : Overlap
     , ratio : Ratio
-    , core : Dict Int Int -> Dict Int Int -> Dict Int Int
     , section : String
     }
+
+
+type alias CoreOp =
+    Dict Int Int -> Dict Int Int -> Dict Int Int
 
 
 operations : Result Error (List Param)
 operations =
     let
-        intersections : List (Args -> Result Error Param)
+        intersections : List (CoreOp -> Result Error (Args -> Param))
         intersections =
             if False then
                 [ --     compareCore "library" Color.red Dict.intersect
@@ -496,7 +499,7 @@ operations =
                 , compareDotDot "alternative" Color.darkYellow Intersect.recursion_thrice_fromList_DotDot
                 ]
 
-        unions : List (Args -> Result Error Param)
+        unions : List (CoreOp -> Result Error (Args -> Param))
         unions =
             if False then
                 [ compareCore "library" Color.red Dict.union
@@ -520,48 +523,36 @@ operations =
         |> Result.map List.concat
 
 
-buildSection : String -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> List (Args -> Result Error Param) -> Result Error (List Param)
+buildSection : String -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> List (CoreOp -> Result Error (Args -> Param)) -> Result Error (List Param)
 buildSection label core list =
-    case list of
-        [] ->
-            Ok []
-
-        _ ->
-            [ ( 1, 0 )
-            , ( 30, 1 )
-            , ( 10, 1 )
-            , ( 1, 1 )
-            , ( 1, 10 )
-            , ( 1, 30 )
-            ]
-                |> List.concatMap
-                    (\ratio ->
-                        [ OverlapRandom, OverlapFull, OverlapNoneEvenOdd, OverlapNoneLeftLower, OverlapNoneRightLower ]
-                            |> List.map
-                                (\overlap ->
-                                    list
-                                        |> List.map
-                                            (\f ->
-                                                f
-                                                    { overlap = overlap
-                                                    , ratio = ratio
-                                                    , core = core
-                                                    , section = label
-                                                    }
-                                            )
-                                        |> Result.Extra.combine
-                                )
-                    )
-                |> Result.Extra.combine
-                |> Result.map List.concat
+    list
+        |> Result.Extra.combineMap (\f -> f core)
+        |> Result.map
+            (List.Extra.lift3
+                (\ratio overlap f ->
+                    f
+                        { overlap = overlap
+                        , ratio = ratio
+                        , section = label
+                        }
+                )
+                [ ( 1, 0 )
+                , ( 30, 1 )
+                , ( 10, 1 )
+                , ( 1, 1 )
+                , ( 1, 10 )
+                , ( 1, 30 )
+                ]
+                [ OverlapRandom, OverlapFull, OverlapNoneEvenOdd, OverlapNoneLeftLower, OverlapNoneRightLower ]
+            )
 
 
-compareCore : String -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Args -> Result Error Param
+compareCore : String -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> CoreOp -> Result Error (Args -> Param)
 compareCore =
     compare Dict.toList .core
 
 
-compareDotDot : String -> Color -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Args -> Result Error Param
+compareDotDot : String -> Color -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> CoreOp -> Result Error (Args -> Param)
 compareDotDot =
     compare DDD.toList .dotdot
 
@@ -581,13 +572,10 @@ compare :
     -> String
     -> Color
     -> (dict -> dict -> dict)
-    -> Args
-    -> Result Error Param
-compare toList selector label color op { overlap, ratio, core, section } =
+    -> CoreOp
+    -> Result Error (Args -> Param)
+compare toList selector label color op core =
     let
-        ( lratio, rratio ) =
-            ratio
-
         ltest : Both Int Int
         ltest =
             generate 150
@@ -606,63 +594,69 @@ compare toList selector label color op { overlap, ratio, core, section } =
     in
     if expected == actual then
         Ok
-            { overlap = overlap
-            , section = section
-            , function = label
-            , color = color
-            , ratio = ratio
-            , op =
-                \size ->
-                    let
-                        lsize : Int
-                        lsize =
-                            size * lratio
+            (\{ overlap, ratio, section } ->
+                let
+                    ( lratio, rratio ) =
+                        ratio
+                in
+                { overlap = overlap
+                , section = section
+                , function = label
+                , color = color
+                , ratio = ratio
+                , op =
+                    \size ->
+                        let
+                            lsize : Int
+                            lsize =
+                                size * lratio
 
-                        rsize : Int
-                        rsize =
-                            size * rratio
+                            rsize : Int
+                            rsize =
+                                size * rratio
 
-                        rsizeFixed : Int
-                        rsizeFixed =
-                            if rsize == lsize then
-                                -- Prevent having the exact same size, and thus random seed
-                                rsize + 1
+                            rsizeFixed : Int
+                            rsizeFixed =
+                                if rsize == lsize then
+                                    -- Prevent having the exact same size, and thus random seed
+                                    rsize + 1
 
-                            else
-                                rsize
+                                else
+                                    rsize
 
-                        ls : dict
-                        ls =
-                            if overlap == OverlapNoneEvenOdd then
-                                selector (mapBoth (\_ n -> n * 2) (generate lsize))
+                            ls : dict
+                            ls =
+                                if overlap == OverlapNoneEvenOdd then
+                                    selector (mapBoth (\_ n -> n * 2) (generate lsize))
 
-                            else
-                                selector (generate lsize)
+                                else
+                                    selector (generate lsize)
 
-                        rs : Both Int Int
-                        rs =
-                            generate rsizeFixed
+                            rs : Both Int Int
+                            rs =
+                                generate rsizeFixed
 
-                        rsFixed : dict
-                        rsFixed =
-                            case overlap of
-                                OverlapRandom ->
-                                    selector rs
+                            rsFixed : dict
+                            rsFixed =
+                                case overlap of
+                                    OverlapRandom ->
+                                        selector rs
 
-                                OverlapFull ->
-                                    ls
+                                    OverlapFull ->
+                                        ls
 
-                                OverlapNoneLeftLower ->
-                                    selector <| mapBoth (\_ n -> n + max lsize rsizeFixed * 3) rs
+                                    OverlapNoneLeftLower ->
+                                        selector <| mapBoth (\_ n -> n + max lsize rsizeFixed * 3) rs
 
-                                OverlapNoneRightLower ->
-                                    selector <| mapBoth (\_ n -> -n) rs
+                                    OverlapNoneRightLower ->
+                                        selector <| mapBoth (\_ n -> -n) rs
 
-                                OverlapNoneEvenOdd ->
-                                    selector <| mapBoth (\_ n -> n * 2 + 1) rs
-                    in
-                    Benchmark.LowLevel.operation (\_ -> op ls rsFixed)
-            }
+                                    OverlapNoneEvenOdd ->
+                                        selector <| mapBoth (\_ n -> n * 2 + 1) rs
+                        in
+                        Benchmark.LowLevel.operation (\_ -> op ls rsFixed)
+                }
+            )
 
     else
         Err
