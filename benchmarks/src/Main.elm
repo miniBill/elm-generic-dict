@@ -593,79 +593,79 @@ compare toList selector label color op core =
             op (selector ltest) (selector rtest) |> toList
     in
     if expected == actual then
-        Ok
-            (\{ overlap, ratio, section } ->
-                let
-                    ( lratio, rratio ) =
-                        ratio
-                in
-                { overlap = overlap
-                , section = section
-                , function = label
-                , color = color
-                , ratio = ratio
-                , op =
-                    \size ->
-                        let
-                            lsize : Int
-                            lsize =
-                                size * lratio
+        (\{ overlap, ratio, section } ->
+            let
+                ( lratio, rratio ) =
+                    ratio
+            in
+            { overlap = overlap
+            , section = section
+            , function = label
+            , color = color
+            , ratio = ratio
+            , op =
+                \size ->
+                    let
+                        lsize : Int
+                        lsize =
+                            size * lratio
 
-                            rsize : Int
-                            rsize =
-                                size * rratio
+                        rsize : Int
+                        rsize =
+                            size * rratio
 
-                            rsizeFixed : Int
-                            rsizeFixed =
-                                if rsize == lsize then
-                                    -- Prevent having the exact same size, and thus random seed
-                                    rsize + 1
+                        rsizeFixed : Int
+                        rsizeFixed =
+                            if rsize == lsize then
+                                -- Prevent having the exact same size, and thus random seed
+                                rsize + 1
 
-                                else
-                                    rsize
+                            else
+                                rsize
 
-                            ls : dict
-                            ls =
-                                if overlap == OverlapNoneEvenOdd then
-                                    selector (mapBoth (\_ n -> n * 2) (generate lsize))
+                        ls : dict
+                        ls =
+                            if overlap == OverlapNoneEvenOdd then
+                                selector (mapBoth (\_ n -> n * 2) (generate lsize))
 
-                                else
-                                    selector (generate lsize)
+                            else
+                                selector (generate lsize)
 
-                            rs : Both Int Int
-                            rs =
-                                generate rsizeFixed
+                        rs : Both Int Int
+                        rs =
+                            generate rsizeFixed
 
-                            rsFixed : dict
-                            rsFixed =
-                                case overlap of
-                                    OverlapRandom ->
-                                        selector rs
+                        rsFixed : dict
+                        rsFixed =
+                            case overlap of
+                                OverlapRandom ->
+                                    selector rs
 
-                                    OverlapFull ->
-                                        ls
+                                OverlapFull ->
+                                    ls
 
-                                    OverlapNoneLeftLower ->
-                                        selector <| mapBoth (\_ n -> n + max lsize rsizeFixed * 3) rs
+                                OverlapNoneLeftLower ->
+                                    selector <| mapBoth (\_ n -> n + max lsize rsizeFixed * 3) rs
 
-                                    OverlapNoneRightLower ->
-                                        selector <| mapBoth (\_ n -> -n) rs
+                                OverlapNoneRightLower ->
+                                    selector <| mapBoth (\_ n -> -n) rs
 
-                                    OverlapNoneEvenOdd ->
-                                        selector <| mapBoth (\_ n -> n * 2 + 1) rs
-                        in
-                        Benchmark.LowLevel.operation (\_ -> op ls rsFixed)
-                }
-            )
+                                OverlapNoneEvenOdd ->
+                                    selector <| mapBoth (\_ n -> n * 2 + 1) rs
+                    in
+                    Benchmark.LowLevel.operation (\_ -> op ls rsFixed)
+            }
+        )
+            |> Ok
 
     else
-        Err
-            { label = label
-            , left = ltest.core
-            , right = rtest.core
-            , expected = expected
-            , actual = actual
-            }
+        { label = label
+        , left = ltest.core
+        , right = rtest.core
+        , expected = expected
+        , actual = actual
+        }
+            |> Err
 
 
 mapBoth : (comparable -> a -> b) -> Both comparable a -> Both comparable b
