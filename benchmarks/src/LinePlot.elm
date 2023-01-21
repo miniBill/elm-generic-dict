@@ -1,14 +1,13 @@
-module LinePlot exposing (BoxStats, Data, Datum, computeStatistics, view)
+module LinePlot exposing (Data, Datum, view)
 
 import Axis
+import Benchmark.Parametric exposing (BoxStats)
 import Color exposing (Color)
 import Dict exposing (Dict)
 import Html.Attributes
-import List.Extra
 import Path exposing (Path)
 import Scale exposing (ContinuousScale)
 import Shape
-import Statistics exposing (quantile)
 import TypedSvg exposing (circle, defs, g, line, linearGradient, stop, svg)
 import TypedSvg.Attributes exposing (class, fill, id, offset, opacity, stopColor, stroke, transform, viewBox)
 import TypedSvg.Attributes.InPx exposing (cx, cy, r, strokeWidth, x1, x2, y1, y2)
@@ -65,91 +64,6 @@ xScale model =
 yScale : Float -> ContinuousScale Float
 yScale max =
     Scale.linear ( h - 2 * padding, 0 ) ( 0, max )
-
-
-type alias BoxStats =
-    { firstQuartile : Float
-    , median : Float
-    , thirdQuartile : Float
-    , max : Float
-    , min : Float
-    , outliers : List Float
-    }
-
-
-computeStatistics : List Float -> BoxStats
-computeStatistics yList =
-    let
-        sortedYList : List Float
-        sortedYList =
-            List.sort yList
-
-        reverseSortedYList : List Float
-        reverseSortedYList =
-            List.reverse sortedYList
-
-        -- Gather stats
-        firstQuartile : Float
-        firstQuartile =
-            Statistics.quantile 0.25 sortedYList
-                |> Maybe.withDefault 0
-
-        median : Float
-        median =
-            Statistics.quantile 0.5 sortedYList
-                |> Maybe.withDefault 0
-
-        thirdQuartile : Float
-        thirdQuartile =
-            quantile 0.75 sortedYList
-                |> Maybe.withDefault 0
-
-        interQuartileRange : Float
-        interQuartileRange =
-            thirdQuartile - firstQuartile
-
-        whiskerTopMax : Float
-        whiskerTopMax =
-            thirdQuartile + 1.5 * interQuartileRange
-
-        whiskerBottomMin : Float
-        whiskerBottomMin =
-            firstQuartile - (1.5 * interQuartileRange)
-
-        min : Float
-        min =
-            Maybe.withDefault 0 <| List.head <| List.Extra.dropWhile (\n -> n < whiskerBottomMin) sortedYList
-
-        max : Float
-        max =
-            Maybe.withDefault 0 <| List.head <| List.Extra.dropWhile (\n -> n > whiskerTopMax) reverseSortedYList
-
-        -- _ =
-        --     if firstQuartile > median || median > thirdQuartile || min > median || median > max then
-        --         let
-        --             _ = Debug.log "yList" yList
-        --             _ = Debug.log "firstQuartile" firstQuartile
-        --             _ = Debug.log "median" median
-        --             _ = Debug.log "thirdQuartile" thirdQuartile
-        --             _ = Debug.log "max" max
-        --             _ = Debug.log "min" min
-        --             _ = Debug.log "firstQuartile > median" <| firstQuartile > median
-        --             _ = Debug.log "median > thirdQuartile" <| median > thirdQuartile
-        --             _ = Debug.log "min > median" <| min > median
-        --             _ = Debug.log "median > max" <| median > max
-        --         in Debug.todo "WTF"
-        --     else
-        --         ()
-    in
-    { firstQuartile = firstQuartile
-    , median = median
-    , thirdQuartile = thirdQuartile
-    , min = min
-    , max = max
-    , outliers =
-        List.Extra.takeWhile (\y -> y < whiskerBottomMin) sortedYList
-            ++ List.Extra.takeWhile (\y -> y > whiskerTopMax) reverseSortedYList
-    }
 
 
 xAxis : Data -> Svg msg

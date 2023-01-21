@@ -1,6 +1,7 @@
 module Main exposing (Flags, Model, Msg, RunState, main)
 
 import Benchmark.LowLevel exposing (Operation)
+import Benchmark.Parametric exposing (BoxStats)
 import Browser
 import Color exposing (Color)
 import Dict exposing (Dict)
@@ -11,7 +12,7 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Intersect
-import LinePlot exposing (BoxStats)
+import LinePlot
 import List.Extra
 import ParamDict exposing (Overlap(..), Param, ParamDict, Ratio)
 import Process
@@ -409,7 +410,7 @@ run param =
                         )
                     |> intersperseInTotal 20 (Process.sleep 0 |> Task.map (\_ -> Nothing))
                     |> Task.sequence
-                    |> Task.map (List.filterMap identity >> LinePlot.computeStatistics)
+                    |> Task.map (List.filterMap identity >> Benchmark.Parametric.computeStatistics)
             )
         |> Task.mapError
             (\e ->
