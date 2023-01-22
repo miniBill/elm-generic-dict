@@ -17,7 +17,6 @@ import List.Extra
 import ParamDict exposing (Overlap(..), Param, ParamDict, Ratio)
 import Process
 import Random
-import Result.Extra
 import Task
 import Union
 
@@ -79,64 +78,59 @@ subscriptions _ =
 
 view : Model -> Element Msg
 view model =
-    case operations of
-        Err e ->
-            viewError e
+    column
+        [ padding 10
+        , spacing 10
+        ]
+        [ wrappedRow [ spacing 10 ]
+            [ case model.state of
+                Stopping ->
+                    button [ Background.color <| Element.rgb 0.8 0.8 0.8 ]
+                        { onPress = Nothing
+                        , label = text "Stopping..."
+                        }
 
-        Ok _ ->
-            column
-                [ padding 10
-                , spacing 10
-                ]
-                [ wrappedRow [ spacing 10 ]
-                    [ case model.state of
-                        Stopping ->
-                            button [ Background.color <| Element.rgb 0.8 0.8 0.8 ]
-                                { onPress = Nothing
-                                , label = text "Stopping..."
-                                }
+                Running ->
+                    button []
+                        { onPress = Just Stop
+                        , label = text "Stop"
+                        }
 
-                        Running ->
-                            button []
-                                { onPress = Just Stop
-                                , label = text "Stop"
-                                }
+                NotRunning ->
+                    button []
+                        { onPress = Just Run
+                        , label = text "Run"
+                        }
+            , text "(the ratio (x:y) means that the smallest dict will be of the indicated size, and the other will be 10 or 30 times bigger)"
+            ]
+        , if ParamDict.isEmpty model.times then
+            Element.none
 
-                        NotRunning ->
-                            button []
-                                { onPress = Just Run
-                                , label = text "Run"
-                                }
-                    , text "(the ratio (x:y) means that the smallest dict will be of the indicated size, and the other will be 10 or 30 times bigger)"
-                    ]
-                , if ParamDict.isEmpty model.times then
-                    Element.none
-
-                  else
-                    model.times
-                        |> ParamDict.toList
-                        |> List.Extra.gatherEqualsBy (\( param, _ ) -> ( param.section, param.ratio, param.overlap ))
-                        |> List.map
-                            (\( ( { section, ratio, overlap }, _ ) as head, tail ) ->
-                                let
-                                    ( lratio, rratio ) =
-                                        ratio
-                                in
-                                column [ spacing 10, alignTop ]
-                                    [ el [ Font.bold, Font.size 24 ] <| text <| section ++ " (" ++ String.fromInt lratio ++ ":" ++ String.fromInt rratio ++ ") " ++ overlapToString overlap
-                                    , (head :: tail)
-                                        |> List.map (\( { color }, times ) -> ( color, times ))
-                                        |> LinePlot.view
-                                        |> Element.html
-                                        |> el []
-                                    , viewTable (head :: tail)
-                                    ]
-                            )
-                        |> wrappedRow [ spacing 10 ]
-                , model.errors
-                    |> List.map (\err -> el [] <| text err)
-                    |> column [ spacing 10 ]
-                ]
+          else
+            model.times
+                |> ParamDict.toList
+                |> List.Extra.gatherEqualsBy (\( param, _ ) -> ( param.section, param.ratio, param.overlap ))
+                |> List.map
+                    (\( ( { section, ratio, overlap }, _ ) as head, tail ) ->
+                        let
+                            ( lratio, rratio ) =
+                                ratio
+                        in
+                        column [ spacing 10, alignTop ]
+                            [ el [ Font.bold, Font.size 24 ] <| text <| section ++ " (" ++ String.fromInt lratio ++ ":" ++ String.fromInt rratio ++ ") " ++ overlapToString overlap
+                            , (head :: tail)
+                                |> List.map (\( { color }, times ) -> ( color, times ))
+                                |> LinePlot.view
+                                |> Element.html
+                                |> el []
+                            , viewTable (head :: tail)
+                            ]
+                    )
+                |> wrappedRow [ spacing 10 ]
+        , model.errors
+            |> List.map (\err -> el [] <| text err)
+            |> column [ spacing 10 ]
+        ]
 
 
 overlapToString : Overlap -> String
@@ -156,35 +150,6 @@ overlapToString overlap =
 
         OverlapNoneEvenOdd ->
             "0% shared (left odd, right even)"
-
-
-viewError : Error -> Element Msg
-viewError { label, left, right, expected, actual } =
-    let
-        viewPair : ( Int, Int ) -> Element msg
-        viewPair ( k, v ) =
-            if k == v then
-                text <| String.fromInt k
-
-            else
-                text <| String.fromInt k ++ "," ++ String.fromInt v
-
-        viewList : String -> List ( Int, Int ) -> List (Element msg)
-        viewList listLabel lst =
-            [ el [ Font.bold ] (text listLabel)
-            , lst
-                |> List.map viewPair
-                |> List.intersperse (text " ")
-                |> wrappedRow []
-            ]
-    in
-    column [ spacing 10 ]
-        (text label
-            :: viewList "left" (Dict.toList left)
-            ++ viewList "right" (Dict.toList right)
-            ++ viewList "expected" expected
-            ++ viewList "actual" actual
-        )
 
 
 viewTable : List ( Param, Dict Int BoxStats ) -> Element Msg
@@ -289,7 +254,7 @@ update msg model =
             { model | state = Running }
                 |> withCmd
                     (case operations of
-                        Ok (head :: tail) ->
+                        head :: tail ->
                             let
                                 queue : ParamQueue
                                 queue =
@@ -470,14 +435,10 @@ type alias Args =
     }
 
 
-type alias CoreOp =
-    Dict Int Int -> Dict Int Int -> Dict Int Int
-
-
-operations : Result Error (List Param)
+operations : List Param
 operations =
     let
-        intersections : List (CoreOp -> Result Error (Args -> Param))
+        intersections : List (Args -> Param)
         intersections =
             if False then
                 [ --     compareCore "library" Color.red Dict.intersect
@@ -500,7 +461,7 @@ operations =
                 , compareDotDot "alternative" Color.darkYellow Intersect.recursion_thrice_fromList_DotDot
                 ]
 
-        unions : List (CoreOp -> Result Error (Args -> Param))
+        unions : List (Args -> Param)
         unions =
             if False then
                 [ compareCore "library" Color.red Dict.union
@@ -517,156 +478,112 @@ operations =
             else
                 []
     in
-    [ buildSection "intersection" Dict.intersect intersections
-    , buildSection "union" Dict.union unions
+    [ buildSection "intersection" intersections
+    , buildSection "union" unions
     ]
-        |> Result.Extra.combine
-        |> Result.map List.concat
+        |> List.concat
 
 
-buildSection : String -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> List (CoreOp -> Result Error (Args -> Param)) -> Result Error (List Param)
-buildSection label core list =
-    list
-        |> Result.Extra.combineMap (\f -> f core)
-        |> Result.map
-            (List.Extra.lift3
-                (\ratio overlap f ->
-                    f
-                        { overlap = overlap
-                        , ratio = ratio
-                        , section = label
-                        }
-                )
-                [ ( 1, 0 )
-                , ( 30, 1 )
-                , ( 10, 1 )
-                , ( 1, 1 )
-                , ( 1, 10 )
-                , ( 1, 30 )
-                ]
-                [ OverlapRandom, OverlapFull, OverlapNoneEvenOdd, OverlapNoneLeftLower, OverlapNoneRightLower ]
-            )
-
-
-compareCore : String -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> CoreOp -> Result Error (Args -> Param)
+compareCore : String -> Color -> (Dict Int Int -> Dict Int Int -> Dict Int Int) -> Args -> Param
 compareCore =
-    compare Dict.toList .core
+    compare .core
 
 
-compareDotDot : String -> Color -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> CoreOp -> Result Error (Args -> Param)
+compareDotDot : String -> Color -> (DDD.Dict Int Int -> DDD.Dict Int Int -> DDD.Dict Int Int) -> Args -> Param
 compareDotDot =
-    compare DDD.toList .dotdot
+    compare .dotdot
 
 
-type alias Error =
-    { label : String
-    , left : Dict Int Int
-    , right : Dict Int Int
-    , expected : List ( Int, Int )
-    , actual : List ( Int, Int )
-    }
+buildSection : String -> List (Args -> Param) -> List Param
+buildSection label list =
+    List.Extra.lift3
+        (\ratio overlap f ->
+            f
+                { overlap = overlap
+                , ratio = ratio
+                , section = label
+                }
+        )
+        [ ( 1, 0 )
+        , ( 30, 1 )
+        , ( 10, 1 )
+        , ( 1, 1 )
+        , ( 1, 10 )
+        , ( 1, 30 )
+        ]
+        [ OverlapRandom, OverlapFull, OverlapNoneEvenOdd, OverlapNoneLeftLower, OverlapNoneRightLower ]
+        list
 
 
 compare :
-    (dict -> List ( Int, Int ))
-    -> (Both Int Int -> dict)
+    (Both Int Int -> dict)
     -> String
     -> Color
     -> (dict -> dict -> dict)
-    -> CoreOp
-    -> Result Error (Args -> Param)
-compare toList selector label color op core =
+    -> Args
+    -> Param
+compare selector label color op { overlap, ratio, section } =
     let
-        ltest : Both Int Int
-        ltest =
-            generate 150
-
-        rtest : Both Int Int
-        rtest =
-            generate 151
-
-        expected : List ( Int, Int )
-        expected =
-            core ltest.core rtest.core |> Dict.toList
-
-        actual : List ( Int, Int )
-        actual =
-            op (selector ltest) (selector rtest) |> toList
+        ( lratio, rratio ) =
+            ratio
     in
-    if expected == actual then
-        (\{ overlap, ratio, section } ->
+    { overlap = overlap
+    , section = section
+    , function = label
+    , color = color
+    , ratio = ratio
+    , op =
+        \size ->
             let
-                ( lratio, rratio ) =
-                    ratio
+                lsize : Int
+                lsize =
+                    size * lratio
+
+                rsize : Int
+                rsize =
+                    size * rratio
+
+                rsizeFixed : Int
+                rsizeFixed =
+                    if rsize == lsize then
+                        -- Prevent having the exact same size, and thus random seed
+                        rsize + 1
+
+                    else
+                        rsize
+
+                ls : dict
+                ls =
+                    if overlap == OverlapNoneEvenOdd then
+                        selector (mapBoth (\_ n -> n * 2) (generate lsize))
+
+                    else
+                        selector (generate lsize)
+
+                rs : Both Int Int
+                rs =
+                    generate rsizeFixed
+
+                rsFixed : dict
+                rsFixed =
+                    case overlap of
+                        OverlapRandom ->
+                            selector rs
+
+                        OverlapFull ->
+                            ls
+
+                        OverlapNoneLeftLower ->
+                            selector <| mapBoth (\_ n -> n + max lsize rsizeFixed * 3) rs
+
+                        OverlapNoneRightLower ->
+                            selector <| mapBoth (\_ n -> -n) rs
+
+                        OverlapNoneEvenOdd ->
+                            selector <| mapBoth (\_ n -> n * 2 + 1) rs
             in
-            { overlap = overlap
-            , section = section
-            , function = label
-            , color = color
-            , ratio = ratio
-            , op =
-                \size ->
-                    let
-                        lsize : Int
-                        lsize =
-                            size * lratio
-
-                        rsize : Int
-                        rsize =
-                            size * rratio
-
-                        rsizeFixed : Int
-                        rsizeFixed =
-                            if rsize == lsize then
-                                -- Prevent having the exact same size, and thus random seed
-                                rsize + 1
-
-                            else
-                                rsize
-
-                        ls : dict
-                        ls =
-                            if overlap == OverlapNoneEvenOdd then
-                                selector (mapBoth (\_ n -> n * 2) (generate lsize))
-
-                            else
-                                selector (generate lsize)
-
-                        rs : Both Int Int
-                        rs =
-                            generate rsizeFixed
-
-                        rsFixed : dict
-                        rsFixed =
-                            case overlap of
-                                OverlapRandom ->
-                                    selector rs
-
-                                OverlapFull ->
-                                    ls
-
-                                OverlapNoneLeftLower ->
-                                    selector <| mapBoth (\_ n -> n + max lsize rsizeFixed * 3) rs
-
-                                OverlapNoneRightLower ->
-                                    selector <| mapBoth (\_ n -> -n) rs
-
-                                OverlapNoneEvenOdd ->
-                                    selector <| mapBoth (\_ n -> n * 2 + 1) rs
-                    in
-                    Benchmark.LowLevel.operation (\_ -> op ls rsFixed)
-            }
-        )
-            |> Ok
-
-    else
-        { label = label
-        , left = ltest.core
-        , right = rtest.core
-        , expected = expected
-        , actual = actual
-        }
-            |> Err
+            Benchmark.LowLevel.operation (\_ -> op ls rsFixed)
+    }
 
 
 mapBoth : (comparable -> a -> b) -> Both comparable a -> Both comparable b
