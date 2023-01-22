@@ -1,32 +1,45 @@
-module Benchmark.Parametric.Input exposing (Input(..), list, map2, step)
+module Benchmark.Parametric.Input exposing (Input(..), allTuples, fromList, getCodec, map, toList, zip)
+
+import Codec exposing (Codec)
 
 
 type Input t
-    = Input (Maybe ( t, () -> Input t ))
+    = Input (List t) (Codec t)
 
 
-list : List t -> Input t
-list lst =
-    case lst of
-        [] ->
-            Input Nothing
-
-        h :: t ->
-            Input (Just ( h, \_ -> list t ))
+fromList : List t -> Codec t -> Input t
+fromList =
+    Input
 
 
-step : Input t -> Maybe ( t, Input t )
-step (Input p) =
-    Maybe.map
-        (\( current, next ) -> ( current, next () ))
-        p
+toList : Input t -> List t
+toList (Input list _) =
+    list
 
 
-map2 : (a -> b -> c) -> Input a -> Input b -> Input c
-map2 f (Input l) (Input r) =
-    case ( l, r ) of
-        ( Just ( a, nextL ), Just ( b, nextR ) ) ->
-            Input (Just ( f a b, \_ -> map2 f (nextL ()) (nextR ()) ))
+getCodec : Input t -> Codec t
+getCodec (Input _ codec) =
+    codec
 
-        _ ->
-            Input Nothing
+
+{-| Return all possible combinations of the two inputs.
+-}
+allTuples : Input a -> Input b -> Input ( a, b )
+allTuples (Input llist lcodec) (Input rlist rcodec) =
+    Input
+        (List.concatMap (\lelem -> List.map (Tuple.pair lelem) rlist) llist)
+        (Codec.tuple lcodec rcodec)
+
+
+{-| Zip the two inputs together, discarding extra elements from the longer list.
+-}
+zip : Input a -> Input b -> Input ( a, b )
+zip (Input llist lcodec) (Input rlist rcodec) =
+    Input
+        (List.map2 Tuple.pair llist rlist)
+        (Codec.tuple lcodec rcodec)
+
+
+map : (a -> b) -> Codec b -> Input a -> Input b
+map f codec (Input list _) =
+    Input (List.map f list) codec

@@ -1,95 +1,37 @@
-module Benchmark.Parametric exposing (BoxStats, computeStatistics, simple)
+module Benchmark.Parametric exposing (BoxStats, computeStatistics, run)
 
 import Benchmark.LowLevel exposing (Operation)
-import Benchmark.Parametric.Input as Input exposing (Input)
-import List.Extra
 import Statistics
 import Task exposing (Task)
 
 
-{-| Benchmarks a list of function, each with its own label.
--}
-simple : Input t -> List ( label, t -> Operation ) -> Task String (List ( label, List ( t, BoxStats ) ))
-simple input functions =
-    measure
-        { input = Input.map2 Tuple.pair (Input.list functions) input
-        , toOperation = \( ( _, f ), t ) -> f t
-        , toOutput = \( ( label, _ ), t ) times -> ( label, ( t, computeStatistics times ) )
-        }
-        |> Task.map (gatherEqualsByAnd Tuple.first Tuple.second)
-
-
-gatherEqualsByAnd : (item -> key) -> (item -> value) -> List item -> List ( key, List value )
-gatherEqualsByAnd toKey toValue items =
-    items
-        |> List.Extra.gatherEqualsBy toKey
-        |> List.map (\( h, t ) -> ( toKey h, List.map toValue (h :: t) ))
-
-
-measure :
-    { input : Input t
-    , toOperation : t -> Operation
-    , toOutput : t -> List Float -> output
-    }
-    -> Task String (List output)
-measure =
-    let
-        go acc params =
-            case step params of
-                Nothing ->
-                    Task.succeed (List.reverse acc)
-
-                Just task ->
-                    Task.andThen
-                        (\( output, nextInput ) ->
-                            go
-                                (output :: acc)
-                                { params | input = nextInput }
-                        )
-                        task
-    in
-    go []
-
-
-step :
-    { input : Input t
-    , toOperation : t -> Operation
-    , toOutput : t -> List Float -> output
-    }
-    -> Maybe (Task String ( output, Input t ))
-step { input, toOperation, toOutput } =
-    Input.step input
-        |> Maybe.map
-            (\( t, nextInput ) ->
+run : Operation -> Task String (List Float)
+run operation =
+    Benchmark.LowLevel.warmup operation
+        |> Task.andThen (\_ -> Benchmark.LowLevel.findSampleSize operation)
+        |> Task.andThen
+            (\sampleSize ->
                 let
-                    operation =
-                        toOperation t
+                    batchCount : Int
+                    batchCount =
+                        min sampleSize 100
+
+                    batchSize : Int
+                    batchSize =
+                        (sampleSize + 99) // 100
                 in
-                Benchmark.LowLevel.warmup operation
-                    |> Task.andThen (\_ -> Benchmark.LowLevel.findSampleSize operation)
-                    |> Task.andThen
-                        (\sampleSize ->
-                            let
-                                batchCount =
-                                    min sampleSize 100
+                List.range 0 batchCount
+                    |> List.map (\_ -> Benchmark.LowLevel.sample batchSize operation)
+                    |> Task.sequence
+            )
+        |> Task.mapError
+            (\e ->
+                case e of
+                    Benchmark.LowLevel.StackOverflow ->
+                        "Stack overflow"
 
-                                batchSize =
-                                    (sampleSize + 99) // 100
-                            in
-                            List.range 0 batchCount
-                                |> List.map (\_ -> Benchmark.LowLevel.sample batchSize operation)
-                                |> Task.sequence
-                                |> Task.map (\timings -> ( toOutput t timings, nextInput ))
-                        )
-                    |> Task.mapError
-                        (\e ->
-                            case e of
-                                Benchmark.LowLevel.StackOverflow ->
-                                    "Stack overflow"
-
-                                Benchmark.LowLevel.UnknownError msg ->
-                                    msg
-                        )
+                    Benchmark.LowLevel.UnknownError msg ->
+                        msg
             )
 
 
