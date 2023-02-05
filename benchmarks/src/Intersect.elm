@@ -1,4 +1,4 @@
-module Intersect exposing (folding, folding_DotDot, recursion_DotDot, recursion_thrice_DotDot, recursion_thrice_fromArray_DotDot, recursion_thrice_fromList_DotDot, recursion_twice_DotDot, toList, toList_DotDot)
+module Intersect exposing (folding, folding_DotDot, recursion_1_DotDot, recursion_2_DotDot, recursion_3_DotDot, recursion_fromArray_DotDot, recursion_fromList_DotDot, toList, toList_DotDot)
 
 import Array exposing (Array)
 import Dict exposing (Dict)
@@ -94,8 +94,8 @@ folding_DotDot l r =
         |> Tuple.first
 
 
-recursion_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
-recursion_DotDot l r =
+recursion_1_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
+recursion_1_DotDot l r =
     let
         rkeys : List comparable
         rkeys =
@@ -153,8 +153,8 @@ type alias QueueState comparable v =
     Maybe ( comparable, v, List (QueueNode comparable v) )
 
 
-recursion_twice_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
-recursion_twice_DotDot l r =
+recursion_2_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
+recursion_2_DotDot l r =
     let
         unpack : List (QueueNode comparable v) -> QueueState comparable v
         unpack queue =
@@ -247,8 +247,8 @@ type alias State comparable v =
     Maybe ( comparable, v, List (DDD.Dict comparable v) )
 
 
-recursion_thrice_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
-recursion_thrice_DotDot l r =
+recursion_3_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
+recursion_3_DotDot l r =
     let
         unpack : List (DDD.Dict comparable v) -> State comparable v
         unpack queue =
@@ -325,8 +325,8 @@ recursion_thrice_DotDot l r =
     go DDD.empty (unpack [ l ]) (unpack [ r ])
 
 
-recursion_thrice_fromArray_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
-recursion_thrice_fromArray_DotDot l r =
+recursion_fromArray_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
+recursion_fromArray_DotDot l r =
     let
         unpack : List (DDD.Dict comparable v) -> State comparable v
         unpack queue =
@@ -446,8 +446,8 @@ fromSortedArray arr =
     go 0 0 len
 
 
-recursion_thrice_fromList_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
-recursion_thrice_fromList_DotDot l r =
+recursion_fromList_DotDot : DDD.Dict comparable v -> DDD.Dict comparable v -> DDD.Dict comparable v
+recursion_fromList_DotDot l r =
     intersectFromZipper
         ( 0, [] )
         (unconsBiggest [ l ])
