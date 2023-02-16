@@ -10,10 +10,7 @@
       "path": "review"
     },
     {
-      "path": "benchmarks"
-    },
-    {
-      "path": "benchmarks/review"
+      "path": "codegen/review"
     }
   ],
   "settings": {}
