@@ -42,6 +42,7 @@ config : List Rule
 config =
     [ NoUnused.Modules.rule
     , NoUnused.Exports.rule
+        |> Rule.ignoreErrorsForDirectories [ "src/Gen/" ]
     , NoUnused.Dependencies.rule
     , NoUnused.CustomTypeConstructorArgs.rule
     , NoUnused.Variables.rule
