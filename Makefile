@@ -1,13 +1,12 @@
 .PHONY: all
-all: generated/ComparableDict.elm benchmarks/src/ParamDict.elm
+all: docs.json generated/ComparableDict.elm
 
-generated/ComparableDict.elm: codegen/Generate.elm codegen/Gen/CustomDict.elm Makefile
+docs.json: src/GenericDict.elm
+	cp -r codegen/Gen src; lamdera make --docs=docs.json; rm -r src/Gen
+
+generated/ComparableDict.elm: codegen/Generate.elm src/GenericDict.elm codegen/Gen/Basics.elm Makefile
 	rm -rf generated
 	elm-codegen run
 
-codegen/Gen/CustomDict.elm: codegen/helpers/CustomDict.elm Makefile
+codegen/Gen/Basics.elm: codegen/elm.codegen.json Makefile
 	elm-codegen install
-
-benchmarks/src/ParamDict.elm: codegen/Generate.elm Makefile
-	elm-codegen run
-	cp generated/ParamDict.elm $@

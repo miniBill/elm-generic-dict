@@ -1,4 +1,4 @@
-module CustomDict exposing
+module GenericDict exposing
     ( Config
     , init, withTypeName, useElmFastDict
     , generateFile, generateDeclarations
@@ -35,6 +35,8 @@ import Gen.Tuple
 import String.Extra
 
 
+{-| Configuration used to build a generic dictionary.
+-}
 type Config
     = Config
         { keyType : Type.Annotation
@@ -218,10 +220,19 @@ type alias Utils =
 
 
 typeDeclaration : Utils -> Elm.Declaration
-typeDeclaration { dictTypeName, keyType, comparableType } =
+typeDeclaration { dictTypeName, keyType, comparableType, useFast } =
+    let
+        dict : Type.Annotation -> Type.Annotation -> Type.Annotation
+        dict =
+            if useFast then
+                Gen.FastDict.annotation_.dict
+
+            else
+                Gen.Dict.annotation_.dict
+    in
     Elm.customType dictTypeName
         [ Elm.variantWith dictTypeName
-            [ Gen.Dict.annotation_.dict
+            [ dict
                 comparableType
                 (Type.tuple keyType (Type.var "v"))
             ]
