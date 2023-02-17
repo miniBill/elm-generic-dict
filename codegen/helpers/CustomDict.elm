@@ -45,6 +45,11 @@ type Config
         }
 
 
+{-| Starts building a custom dictionary, given the type of the key, the namespace of the resulting file, and a `toComparable` function.
+
+The `toComparable` function will be copied in each declaration, so it should be kept very simple (or extracted to a function).
+
+-}
 init :
     { keyType : Type.Annotation
     , namespace : List String
@@ -61,6 +66,8 @@ init cfg =
         }
 
 
+{-| Use a custom type name for the dictionary type.
+-}
 withTypeName : String -> Config -> Config
 withTypeName name (Config config) =
     Config { config | typeName = Just name }
@@ -102,6 +109,7 @@ generateDeclarations ((Config { keyType, toComparable, namespace, useFast }) as 
             , useFast = useFast
             }
 
+        baseDecls : List (Utils -> Elm.Declaration)
         baseDecls =
             [ typeDeclaration
             , emptyDeclaration
@@ -124,6 +132,7 @@ generateDeclarations ((Config { keyType, toComparable, namespace, useFast }) as 
             , partitionDeclaration
             ]
 
+        fastDecls : List (Utils -> Elm.Declaration)
         fastDecls =
             if useFast then
                 [ getMinKeyDeclaration
@@ -176,6 +185,7 @@ generateFile ((Config cfg) as config) =
         dictTypeName =
             toDictTypeName config
 
+        decls : List Elm.Declaration
         decls =
             generateDeclarations config
     in
@@ -279,7 +289,6 @@ updateDeclaration ({ keyType, annotation, toComparable } as utils) =
                                     |> Gen.Maybe.map Gen.Tuple.second
                                     |> (\s ->
                                             Elm.apply updater [ s ]
-                                                |> identity
                                        )
                                     |> Gen.Maybe.map (Gen.Tuple.pair key)
                             )
@@ -629,6 +638,7 @@ getVariables annotation =
 isLower : String -> Bool
 isLower s =
     let
+        first : String
         first =
             String.left 1 s
     in
