@@ -40,6 +40,10 @@ main =
             Elm.customType "Id"
                 [ Elm.variantWith "Id" [ Type.string ]
                 ]
+                |> Elm.exposeWith
+                    { exposeConstructor = True
+                    , group = Just "Types"
+                    }
 
         decls : List Elm.Declaration
         decls =
