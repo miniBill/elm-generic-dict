@@ -227,24 +227,24 @@ type alias Utils =
 
 
 typeDeclaration : Utils -> Elm.Declaration
-typeDeclaration { dictTypeName, keyType, comparableType, useFast } =
-    let
-        dict : Type.Annotation -> Type.Annotation -> Type.Annotation
-        dict =
-            if useFast then
-                Gen.FastDict.annotation_.dict
-
-            else
-                Gen.Dict.annotation_.dict
-    in
+typeDeclaration ({ dictTypeName, keyType, comparableType } as utils) =
     Elm.customType dictTypeName
         [ Elm.variantWith dictTypeName
-            [ dict
+            [ containerAnnotation utils
                 comparableType
                 (Type.tuple keyType (Type.var "v"))
             ]
         ]
         |> Elm.exposeWith { exposeConstructor = False, group = Just "Dictionaries" }
+
+
+containerAnnotation : Utils -> (Type.Annotation -> Type.Annotation -> Type.Annotation)
+containerAnnotation { useFast } =
+    if useFast then
+        Gen.FastDict.annotation_.dict
+
+    else
+        Gen.Dict.annotation_.dict
 
 
 emptyDeclaration : Utils -> Elm.Declaration
@@ -571,12 +571,13 @@ build { dictTypeName, annotation } var dict =
 
 
 decomposeDict : Utils -> (Elm.Expression -> Elm.Expression) -> Elm.Expression -> Elm.Expression
-decomposeDict { keyType, comparableType, dictTypeName } f d =
+decomposeDict ({ keyType, comparableType, dictTypeName } as utils) f d =
     Elm.Case.custom d
         (Type.named [] dictTypeName)
         [ Elm.Case.branch1 dictTypeName
             ( "dict"
-            , Gen.Dict.annotation_.dict comparableType
+            , containerAnnotation utils
+                comparableType
                 (Type.tuple
                     keyType
                     (Type.var "v")
