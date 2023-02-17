@@ -18,15 +18,25 @@ import Gen.Maybe
 -}
 main : Program {} () ()
 main =
-    Generate.run
-        [ CustomDict.withKey (Type.list (Type.var "comparable"))
-            |> CustomDict.generate
-        , CustomDict.withKey (Gen.Maybe.annotation_.maybe Type.int)
-            |> CustomDict.withToComparable (Gen.Maybe.withDefault (Elm.int 0))
-            |> CustomDict.generate
-        , CustomDict.withKey (Type.named [] "Param")
-            |> CustomDict.withToComparable (\param -> Elm.apply (Elm.val "toComparable") [ param ] |> Elm.withType (Type.named [] "Key"))
-            |> CustomDict.withAdditionalDeclarations
+    [ CustomDict.init
+        { keyType = Type.list (Type.var "comparable")
+        , namespace = []
+        , toComparable = identity
+        }
+        |> CustomDict.generateFile
+    , CustomDict.init
+        { keyType = Gen.Maybe.annotation_.maybe Type.int
+        , toComparable = Gen.Maybe.withDefault (Elm.int 0)
+        , namespace = []
+        }
+        |> CustomDict.generateFile
+    , CustomDict.init
+        { keyType = Type.named [] "Param"
+        , toComparable = \param -> Elm.apply (Elm.val "toComparable") [ param ] |> Elm.withType (Type.named [] "Key")
+        , namespace = []
+        }
+        |> CustomDict.generateDeclarations
+        |> (\d ->
                 [ Elm.alias "Param" paramAnnotation
                     |> Elm.exposeWith { exposeConstructor = False, group = Just "Types" }
                 , overlapCases
@@ -39,8 +49,11 @@ main =
                 , paramToComparable
                 , overlapToString
                 ]
-            |> CustomDict.generate
-        ]
+                    ++ d
+           )
+        |> Elm.file [ "ParamDict" ]
+    ]
+        |> Generate.run
 
 
 overlapCases : List String

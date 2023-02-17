@@ -1,20 +1,25 @@
 module CustomDict exposing
     ( Config
-    , withKey
-    , withToComparable
-    , generate
-    , withAdditionalDeclarations, withSize
+    , init, withTypeName, useElmFastDict
+    , generateFile, generateDeclarations
     )
 
 {-|
 
+
+# Types
+
 @docs Config
 
-@docs withKey
 
-@docs withToComparable
+# Configuration
 
-@docs generate
+@docs init, withTypeName, useElmFastDict
+
+
+# Generation
+
+@docs generateFile, generateDeclarations
 
 -}
 
@@ -22,8 +27,8 @@ import Elm
 import Elm.Annotation as Type
 import Elm.Case
 import Elm.ToString
-import Gen.Debug
 import Gen.Dict
+import Gen.FastDict
 import Gen.List
 import Gen.Maybe
 import Gen.Tuple
@@ -34,78 +39,51 @@ type Config
     = Config
         { keyType : Type.Annotation
         , namespace : List String
-        , size : Bool
         , toComparable : Elm.Expression -> Elm.Expression
-        , customDeclarations : List Elm.Declaration
+        , typeName : Maybe String
+        , useFast : Bool
         }
 
 
-withKey : Type.Annotation -> Config
-withKey keyType =
+init :
+    { keyType : Type.Annotation
+    , namespace : List String
+    , toComparable : Elm.Expression -> Elm.Expression
+    }
+    -> Config
+init cfg =
     Config
-        { keyType = keyType
-        , namespace = []
-        , size = False
-        , toComparable = identity
-        , customDeclarations = []
+        { keyType = cfg.keyType
+        , namespace = cfg.namespace
+        , toComparable = cfg.toComparable
+        , typeName = Nothing
+        , useFast = False
         }
 
 
-withToComparable : (Elm.Expression -> Elm.Expression) -> Config -> Config
-withToComparable toComparable (Config config) =
-    Config { config | toComparable = toComparable }
+withTypeName : String -> Config -> Config
+withTypeName name (Config config) =
+    Config { config | typeName = Just name }
 
 
-{-| NOT IMPLEMENTED YET. This makes the generated code bigger but makes `size` constant time.
+{-| Use `miniBill/elm-fast-dict` as the backing container.
+This means that generated code will depend on that package but gives the advantages of that package.
 -}
-withSize : Bool -> Config -> Config
-withSize size (Config config) =
-    Config { config | size = size }
+useElmFastDict : Config -> Config
+useElmFastDict (Config config) =
+    Config { config | useFast = True }
 
 
-generate : Config -> Elm.File
-generate (Config { size, keyType, toComparable, namespace, customDeclarations }) =
+generateDeclarations : Config -> List Elm.Declaration
+generateDeclarations ((Config { keyType, toComparable, namespace, useFast }) as config) =
     let
-        keyTypeName : String
-        keyTypeName =
-            (Elm.ToString.annotation keyType).signature
-                |> String.split " "
-                |> List.head
-                |> Maybe.withDefault "???"
-                |> String.Extra.classify
-
         dictTypeName : String
         dictTypeName =
-            keyTypeName ++ "Dict"
+            toDictTypeName config
 
         comparableType : Type.Annotation
         comparableType =
-            -- TODO: fix this
-            Elm.val "value"
-                |> Elm.withType keyType
-                |> toComparable
-                |> Elm.ToString.expression
-                |> .signature
-                |> String.split " "
-                |> (\l ->
-                        case l of
-                            [] ->
-                                Type.var "unknown"
-
-                            h :: ts ->
-                                Type.namedWith []
-                                    h
-                                    (List.map
-                                        (\t ->
-                                            if isLower t then
-                                                Type.var t
-
-                                            else
-                                                Type.named [] t
-                                        )
-                                        ts
-                                    )
-                   )
+            toComparableType config
 
         annotation : String -> Type.Annotation
         annotation value =
@@ -121,40 +99,102 @@ generate (Config { size, keyType, toComparable, namespace, customDeclarations })
             , comparableType = comparableType
             , keyType = keyType
             , toComparable = toComparable
+            , useFast = useFast
             }
 
-        decls : List Elm.Declaration
-        decls =
-            if size then
-                [ Gen.Debug.todo "Keeping track of size not supported yet"
-                    |> Elm.declaration "todo"
-                    |> Elm.expose
+        baseDecls =
+            [ typeDeclaration
+            , emptyDeclaration
+            , singletonDeclaration
+            , insertDeclaration
+            , updateDeclaration
+            , removeDeclaration
+            , isEmptyDeclaration
+            , memberDeclaration
+            , getDeclaration
+            , sizeDeclaration
+            , keysDeclaration
+            , valuesDeclaration
+            , toListDeclaration
+            , fromListDeclaration
+            , mapDeclaration
+            , foldlDeclaration
+            , foldrDeclaration
+            , filterDeclaration
+            , partitionDeclaration
+            ]
+
+        fastDecls =
+            if useFast then
+                [ getMinKeyDeclaration
+                , getMinDeclaration
+                , popMinDeclaration
+                , getMaxKeyDeclaration
+                , getMaxDeclaration
+                , popMaxDeclaration
                 ]
 
             else
-                [ typeDeclaration
-                , emptyDeclaration
-                , singletonDeclaration
-                , insertDeclaration
-                , updateDeclaration
-                , removeDeclaration
-                , isEmptyDeclaration
-                , memberDeclaration
-                , getDeclaration
-                , sizeDeclaration
-                , keysDeclaration
-                , valuesDeclaration
-                , toListDeclaration
-                , fromListDeclaration
-                , mapDeclaration
-                , foldlDeclaration
-                , foldrDeclaration
-                , filterDeclaration
-                , partitionDeclaration
-                ]
-                    |> List.map (\f -> f utils)
+                []
     in
-    Elm.file (namespace ++ [ dictTypeName ]) (customDeclarations ++ decls)
+    List.map (\f -> f utils) (baseDecls ++ fastDecls)
+
+
+toComparableType : Config -> Type.Annotation
+toComparableType (Config { keyType, toComparable }) =
+    Elm.val "value"
+        |> Elm.withType keyType
+        |> toComparable
+        |> Elm.ToString.expression
+        |> .signature
+        |> String.split " "
+        |> (\l ->
+                case l of
+                    [] ->
+                        Type.var "unknown"
+
+                    h :: ts ->
+                        Type.namedWith []
+                            h
+                            (List.map
+                                (\t ->
+                                    if isLower t then
+                                        Type.var t
+
+                                    else
+                                        Type.named [] t
+                                )
+                                ts
+                            )
+           )
+
+
+generateFile : Config -> Elm.File
+generateFile ((Config cfg) as config) =
+    let
+        dictTypeName : String
+        dictTypeName =
+            toDictTypeName config
+
+        decls =
+            generateDeclarations config
+    in
+    Elm.file (cfg.namespace ++ [ dictTypeName ]) decls
+
+
+toDictTypeName : Config -> String
+toDictTypeName ((Config cfg) as config) =
+    cfg.typeName
+        |> Maybe.withDefault (toKeyTypeName config ++ "Dict")
+
+
+toKeyTypeName : Config -> String
+toKeyTypeName (Config { keyType }) =
+    (Elm.ToString.annotation keyType).signature
+        |> String.split " "
+        |> List.head
+        |> Maybe.withDefault "???"
+        |> String.Extra.classify
 
 
 type alias Utils =
@@ -163,6 +203,7 @@ type alias Utils =
     , annotation : String -> Type.Annotation
     , comparableType : Type.Annotation
     , toComparable : Elm.Expression -> Elm.Expression
+    , useFast : Bool
     }
 
 
@@ -426,7 +467,7 @@ foldDeclaration name fold ({ keyType, annotation } as utils) =
         )
         ( "b0", Just <| Type.var "b" )
         ( "d", Just <| annotation "v" )
-        (\f init ->
+        (\f initAcc ->
             decomposeDict utils
                 (fold
                     (Elm.fn3
@@ -437,7 +478,7 @@ foldDeclaration name fold ({ keyType, annotation } as utils) =
                         \_ kv acc ->
                             Elm.Case.tuple kv "k" "v" (\k v -> Elm.apply f [ k, v, acc ])
                     )
-                    init
+                    initAcc
                 )
         )
         |> Elm.declaration name
@@ -518,8 +559,56 @@ decomposeDict { keyType, comparableType, dictTypeName } f d =
         ]
 
 
+getMinKeyDeclaration : Utils -> Elm.Declaration
+getMinKeyDeclaration ({ annotation } as utils) =
+    Elm.fn ( "d", Just <| annotation "v" )
+        (decomposeDict utils Gen.FastDict.getMinKey)
+        |> Elm.declaration "getMinKey"
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Min / Max" }
 
---- Hic Sunt Monsters ---
+
+getMinDeclaration : Utils -> Elm.Declaration
+getMinDeclaration ({ annotation } as utils) =
+    Elm.fn ( "d", Just <| annotation "v" )
+        (decomposeDict utils Gen.FastDict.getMin)
+        |> Elm.declaration "getMin"
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Min / Max" }
+
+
+popMinDeclaration : Utils -> Elm.Declaration
+popMinDeclaration ({ annotation } as utils) =
+    Elm.fn ( "d", Just <| annotation "v" )
+        (decomposeDict utils Gen.FastDict.popMin)
+        |> Elm.declaration "popMin"
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Min / Max" }
+
+
+getMaxKeyDeclaration : Utils -> Elm.Declaration
+getMaxKeyDeclaration ({ annotation } as utils) =
+    Elm.fn ( "d", Just <| annotation "v" )
+        (decomposeDict utils Gen.FastDict.getMaxKey)
+        |> Elm.declaration "getMaxKey"
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Min / Max" }
+
+
+getMaxDeclaration : Utils -> Elm.Declaration
+getMaxDeclaration ({ annotation } as utils) =
+    Elm.fn ( "d", Just <| annotation "v" )
+        (decomposeDict utils Gen.FastDict.getMax)
+        |> Elm.declaration "getMax"
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Min / Max" }
+
+
+popMaxDeclaration : Utils -> Elm.Declaration
+popMaxDeclaration ({ annotation } as utils) =
+    Elm.fn ( "d", Just <| annotation "v" )
+        (decomposeDict utils Gen.FastDict.popMax)
+        |> Elm.declaration "popMax"
+        |> Elm.exposeWith { exposeConstructor = False, group = Just "Min / Max" }
+
+
+
+--- Hic Sunt Leones ---
 
 
 getVariables : Type.Annotation -> List String
@@ -534,8 +623,7 @@ getVariables annotation =
         -- Really sorry
         |> String.split " "
         |> List.map String.trim
-        |> List.filter
-            isLower
+        |> List.filter isLower
 
 
 isLower : String -> Bool
@@ -545,8 +633,3 @@ isLower s =
             String.left 1 s
     in
     String.toLower first == first
-
-
-withAdditionalDeclarations : List Elm.Declaration -> Config -> Config
-withAdditionalDeclarations decls (Config config) =
-    Config { config | customDeclarations = config.customDeclarations ++ decls }
