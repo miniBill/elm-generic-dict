@@ -83,6 +83,11 @@ useElmFastDict (Config config) =
     Config { config | useFast = True }
 
 
+{-| Generates declarations from the given configuration.
+
+This can be useful if you want to add your own custom declarations to the file.
+
+-}
 generateDeclarations : Config -> List Elm.Declaration
 generateDeclarations ((Config { keyType, toComparable, namespace, useFast }) as config) =
     let
@@ -180,6 +185,8 @@ toComparableType (Config { keyType, toComparable }) =
            )
 
 
+{-| Generates a file from the given configuration.
+-}
 generateFile : Config -> Elm.File
 generateFile ((Config cfg) as config) =
     let
