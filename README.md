@@ -1,7 +1,10 @@
 # `elm-generic-dict` [![Build Status](https://github.com/miniBill/elm-generic-dict/workflows/CI/badge.svg)](https://github.com/miniBill/elm-generic-dict/actions?query=branch%3Amain)
 
-## Checklist
+`elm-generic-dict` can be used to codegen dictionaries with arbitrary types as keys. It is meant to be used as a library with [`elm-codegen`](https://github.com/mdgriffith/elm-codegen).
 
-- [ ] Replace this with a nice readme (see this guide for designing Elm packages and writing nice docs/READMEs: <https://github.com/dillonkearns/idiomatic-elm-package-guide>)
-- [ ] Find all instances of replaceme in this repo and replace them
-- [ ] Publish version 1.0.0 (you have to start at V1 with Elm packages). Run `elm publish` from the root folder of this repo when you're all ready, and it will walk you through the process!
+The dictionaries don't contain functions, and the API (of the generated code) doesn't require you to pass any function.
+
+The main disadvantage of using this approach is code duplication, while the advantages are:
+1. does not contain functions (useful for debugging and usage in lamdera),
+2. does not require passing in functions when using it (cleaner API, no possibility of mistakes),
+3. live code inclusion will trim unused functions.
