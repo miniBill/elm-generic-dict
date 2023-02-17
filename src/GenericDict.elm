@@ -4,7 +4,7 @@ module GenericDict exposing
     , generateFile, generateDeclarations
     )
 
-{-|
+{-| This module can be use to codegen a dictionary with a custom type as key.
 
 
 # Types
@@ -49,7 +49,7 @@ type Config
 
 {-| Starts building a custom dictionary, given the type of the key, the namespace of the resulting file, and a `toComparable` function.
 
-The `toComparable` function will be copied in each declaration, so it should be kept very simple (or extracted to a function).
+The `toComparable` function will be _copied_ in each declaration, so it should be kept very simple (or extracted to a function, and then passed in like `{ toComparable = Gen.YourType.toString }`, or similar).
 
 -}
 init :
@@ -76,7 +76,7 @@ withTypeName name (Config config) =
 
 
 {-| Use `miniBill/elm-fast-dict` as the backing container.
-This means that generated code will depend on that package but gives the advantages of that package.
+This means that generated code will depend on that package but gives the advantages of that package (read `elm-fast-dict`'s README for pros and cons).
 -}
 useElmFastDict : Config -> Config
 useElmFastDict (Config config) =
