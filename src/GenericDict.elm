@@ -249,25 +249,42 @@ containerAnnotation { useFast } =
 
 emptyDeclaration : Utils -> Elm.Declaration
 emptyDeclaration utils =
-    build utils "v" Gen.Dict.empty
+    build utils
+        "v"
+        (if utils.useFast then
+            Gen.FastDict.empty
+
+         else
+            Gen.Dict.empty
+        )
         |> Elm.declaration "empty"
         |> Elm.exposeWith { exposeConstructor = False, group = Just "Build" }
 
 
 singletonDeclaration : Utils -> Elm.Declaration
-singletonDeclaration ({ keyType, toComparable } as utils) =
+singletonDeclaration ({ keyType, toComparable, useFast } as utils) =
     Elm.fn2
         ( "key", Just keyType )
         ( "value", Just <| Type.var "v" )
         (\key value ->
-            build utils "v" (Gen.Dict.singleton (toComparable key) (Elm.tuple key value))
+            build utils
+                "v"
+                ((if useFast then
+                    Gen.FastDict.singleton
+
+                  else
+                    Gen.Dict.singleton
+                 )
+                    (toComparable key)
+                    (Elm.tuple key value)
+                )
         )
         |> Elm.declaration "singleton"
         |> Elm.exposeWith { exposeConstructor = False, group = Just "Build" }
 
 
 insertDeclaration : Utils -> Elm.Declaration
-insertDeclaration ({ annotation, keyType, toComparable } as utils) =
+insertDeclaration ({ annotation, keyType, toComparable, useFast } as utils) =
     Elm.fn3
         ( "key", Just keyType )
         ( "value", Just <| Type.var "v" )
@@ -277,7 +294,16 @@ insertDeclaration ({ annotation, keyType, toComparable } as utils) =
                 (\dict ->
                     build utils
                         "v"
-                        (Gen.Dict.insert (toComparable key) (Elm.tuple key value) dict)
+                        ((if useFast then
+                            Gen.FastDict.insert
+
+                          else
+                            Gen.Dict.insert
+                         )
+                            (toComparable key)
+                            (Elm.tuple key value)
+                            dict
+                        )
                 )
         )
         |> Elm.declaration "insert"
@@ -285,7 +311,7 @@ insertDeclaration ({ annotation, keyType, toComparable } as utils) =
 
 
 updateDeclaration : Utils -> Elm.Declaration
-updateDeclaration ({ keyType, annotation, toComparable } as utils) =
+updateDeclaration ({ keyType, annotation, toComparable, useFast } as utils) =
     Elm.fn3
         ( "key", Just keyType )
         ( "f"
@@ -300,7 +326,12 @@ updateDeclaration ({ keyType, annotation, toComparable } as utils) =
                 (\dict ->
                     build utils
                         "v"
-                        (Gen.Dict.update
+                        ((if useFast then
+                            Gen.FastDict.update
+
+                          else
+                            Gen.Dict.update
+                         )
                             (toComparable key)
                             (\e ->
                                 e
@@ -319,7 +350,7 @@ updateDeclaration ({ keyType, annotation, toComparable } as utils) =
 
 
 removeDeclaration : Utils -> Elm.Declaration
-removeDeclaration ({ keyType, annotation, toComparable } as utils) =
+removeDeclaration ({ keyType, annotation, toComparable, useFast } as utils) =
     Elm.fn2
         ( "key", Just keyType )
         ( "d", Just <| annotation "v" )
@@ -328,7 +359,13 @@ removeDeclaration ({ keyType, annotation, toComparable } as utils) =
                 (\dict ->
                     build utils
                         "v"
-                        (Gen.Dict.remove (toComparable key)
+                        ((if useFast then
+                            Gen.FastDict.remove
+
+                          else
+                            Gen.Dict.remove
+                         )
+                            (toComparable key)
                             dict
                         )
                 )
@@ -338,33 +375,56 @@ removeDeclaration ({ keyType, annotation, toComparable } as utils) =
 
 
 isEmptyDeclaration : Utils -> Elm.Declaration
-isEmptyDeclaration ({ annotation } as utils) =
+isEmptyDeclaration ({ annotation, useFast } as utils) =
     Elm.fn
         ( "d", Just <| annotation "v" )
-        (decomposeDict utils Gen.Dict.isEmpty)
+        (decomposeDict utils
+            (if useFast then
+                Gen.FastDict.isEmpty
+
+             else
+                Gen.Dict.isEmpty
+            )
+        )
         |> Elm.declaration "isEmpty"
         |> Elm.exposeWith { exposeConstructor = False, group = Just "Query" }
 
 
 memberDeclaration : Utils -> Elm.Declaration
-memberDeclaration ({ keyType, annotation, toComparable } as utils) =
+memberDeclaration ({ keyType, annotation, toComparable, useFast } as utils) =
     Elm.fn2
         ( "key", Just keyType )
         ( "d", Just <| annotation "v" )
-        (\key -> decomposeDict utils (Gen.Dict.member (toComparable key)))
+        (\key ->
+            decomposeDict utils
+                ((if useFast then
+                    Gen.FastDict.member
+
+                  else
+                    Gen.Dict.member
+                 )
+                    (toComparable key)
+                )
+        )
         |> Elm.declaration "member"
         |> Elm.exposeWith { exposeConstructor = False, group = Just "Query" }
 
 
 getDeclaration : Utils -> Elm.Declaration
-getDeclaration ({ keyType, annotation, toComparable } as utils) =
+getDeclaration ({ keyType, annotation, toComparable, useFast } as utils) =
     Elm.fn2
         ( "key", Just keyType )
         ( "d", Just <| annotation "v" )
         (\key ->
             decomposeDict utils
                 (\dict ->
-                    Gen.Dict.get (toComparable key)
+                    (if useFast then
+                        Gen.FastDict.get
+
+                     else
+                        Gen.Dict.get
+                    )
+                        (toComparable key)
                         dict
                         |> Gen.Maybe.map Gen.Tuple.second
                         |> Elm.withType (Type.namedWith [] "Maybe" [ Type.var "v" ])
@@ -375,20 +435,32 @@ getDeclaration ({ keyType, annotation, toComparable } as utils) =
 
 
 sizeDeclaration : Utils -> Elm.Declaration
-sizeDeclaration ({ annotation } as utils) =
+sizeDeclaration ({ annotation, useFast } as utils) =
     Elm.fn ( "d", Just <| annotation "v" )
-        (decomposeDict utils Gen.Dict.size)
+        (decomposeDict utils
+            (if useFast then
+                Gen.FastDict.size
+
+             else
+                Gen.Dict.size
+            )
+        )
         |> Elm.declaration "size"
         |> Elm.exposeWith { exposeConstructor = False, group = Just "Query" }
 
 
 keysDeclaration : Utils -> Elm.Declaration
-keysDeclaration ({ annotation } as utils) =
+keysDeclaration ({ annotation, useFast } as utils) =
     Elm.fn ( "d", Just <| annotation "v" )
         (decomposeDict utils
             (\d ->
                 d
-                    |> Gen.Dict.values
+                    |> (if useFast then
+                            Gen.FastDict.values
+
+                        else
+                            Gen.Dict.values
+                       )
                     |> Gen.List.call_.map Gen.Tuple.values_.first
             )
         )
@@ -397,12 +469,17 @@ keysDeclaration ({ annotation } as utils) =
 
 
 valuesDeclaration : Utils -> Elm.Declaration
-valuesDeclaration ({ annotation } as utils) =
+valuesDeclaration ({ annotation, useFast } as utils) =
     Elm.fn ( "d", Just <| annotation "v" )
         (decomposeDict utils
             (\d ->
                 d
-                    |> Gen.Dict.values
+                    |> (if useFast then
+                            Gen.FastDict.values
+
+                        else
+                            Gen.Dict.values
+                       )
                     |> Gen.List.call_.map Gen.Tuple.values_.second
             )
         )
@@ -411,15 +488,22 @@ valuesDeclaration ({ annotation } as utils) =
 
 
 toListDeclaration : Utils -> Elm.Declaration
-toListDeclaration ({ annotation } as utils) =
+toListDeclaration ({ annotation, useFast } as utils) =
     Elm.fn ( "d", Just <| annotation "v" )
-        (decomposeDict utils Gen.Dict.values)
+        (decomposeDict utils
+            (if useFast then
+                Gen.FastDict.values
+
+             else
+                Gen.Dict.values
+            )
+        )
         |> Elm.declaration "toList"
         |> Elm.exposeWith { exposeConstructor = False, group = Just "Lists" }
 
 
 fromListDeclaration : Utils -> Elm.Declaration
-fromListDeclaration ({ keyType, toComparable } as utils) =
+fromListDeclaration ({ keyType, toComparable, useFast } as utils) =
     Elm.fn
         ( "l"
         , Just
@@ -433,7 +517,12 @@ fromListDeclaration ({ keyType, toComparable } as utils) =
                     (Elm.functionReduced "e" <|
                         \e -> Elm.Case.tuple e "k" "v" (\k _ -> Elm.tuple (toComparable k) e)
                     )
-                |> Gen.Dict.call_.fromList
+                |> (if useFast then
+                        Gen.FastDict.call_.fromList
+
+                    else
+                        Gen.Dict.call_.fromList
+                   )
                 |> build
                     utils
                     "v"
@@ -443,7 +532,7 @@ fromListDeclaration ({ keyType, toComparable } as utils) =
 
 
 mapDeclaration : Utils -> Elm.Declaration
-mapDeclaration ({ keyType, annotation } as utils) =
+mapDeclaration ({ keyType, annotation, useFast } as utils) =
     Elm.fn2
         ( "f"
         , Just <|
@@ -456,7 +545,12 @@ mapDeclaration ({ keyType, annotation } as utils) =
             decomposeDict utils
                 (\dict ->
                     dict
-                        |> Gen.Dict.map
+                        |> (if useFast then
+                                Gen.FastDict.map
+
+                            else
+                                Gen.Dict.map
+                           )
                             (\_ kv ->
                                 Elm.Case.tuple kv
                                     "k"
@@ -474,13 +568,27 @@ mapDeclaration ({ keyType, annotation } as utils) =
 
 
 foldlDeclaration : Utils -> Elm.Declaration
-foldlDeclaration =
-    foldDeclaration "foldl" Gen.Dict.call_.foldl
+foldlDeclaration ({ useFast } as utils) =
+    foldDeclaration "foldl"
+        (if useFast then
+            Gen.FastDict.call_.foldl
+
+         else
+            Gen.Dict.call_.foldl
+        )
+        utils
 
 
 foldrDeclaration : Utils -> Elm.Declaration
-foldrDeclaration =
-    foldDeclaration "foldr" Gen.Dict.call_.foldr
+foldrDeclaration ({ useFast } as utils) =
+    foldDeclaration "foldr"
+        (if useFast then
+            Gen.FastDict.call_.foldr
+
+         else
+            Gen.Dict.call_.foldr
+        )
+        utils
 
 
 foldDeclaration : String -> (Elm.Expression -> Elm.Expression -> Elm.Expression -> Elm.Expression) -> Utils -> Elm.Declaration
@@ -513,7 +621,7 @@ foldDeclaration name fold ({ keyType, annotation } as utils) =
 
 
 filterDeclaration : Utils -> Elm.Declaration
-filterDeclaration ({ keyType, annotation } as utils) =
+filterDeclaration ({ keyType, annotation, useFast } as utils) =
     Elm.fn2
         ( "f"
         , Just <|
@@ -525,7 +633,12 @@ filterDeclaration ({ keyType, annotation } as utils) =
         (\f d ->
             build utils "v" <|
                 decomposeDict utils
-                    (Gen.Dict.filter
+                    ((if useFast then
+                        Gen.FastDict.filter
+
+                      else
+                        Gen.Dict.filter
+                     )
                         (\_ kv ->
                             Elm.Case.tuple kv "k" "v" (\k v -> Elm.apply f [ k, v ])
                         )
@@ -537,7 +650,7 @@ filterDeclaration ({ keyType, annotation } as utils) =
 
 
 partitionDeclaration : Utils -> Elm.Declaration
-partitionDeclaration ({ keyType, annotation } as utils) =
+partitionDeclaration ({ keyType, annotation, useFast } as utils) =
     Elm.fn2
         ( "f"
         , Just <|
@@ -550,7 +663,12 @@ partitionDeclaration ({ keyType, annotation } as utils) =
             decomposeDict utils
                 (\dict ->
                     dict
-                        |> Gen.Dict.partition
+                        |> (if useFast then
+                                Gen.FastDict.partition
+
+                            else
+                                Gen.Dict.partition
+                           )
                             (\_ kv ->
                                 Elm.Case.tuple kv "k" "v" (\k v -> Elm.apply f [ k, v ])
                             )
