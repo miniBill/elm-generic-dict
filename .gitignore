@@ -1,6 +1,5 @@
 elm-stuff/
 node_modules/
 tests/VerifyExamples
-src/Gen
 generated
 dist
