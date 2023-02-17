@@ -1,7 +1,6 @@
 elm-stuff/
 node_modules/
 tests/VerifyExamples
-codegen/Gen/
 src/Gen
 generated
 dist
