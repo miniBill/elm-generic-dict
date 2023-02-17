@@ -12,3 +12,5 @@ src/Gen/Basics.elm: codegen/elm.codegen.json Makefile
 	rm -rf src/Gen
 	elm-codegen install
 	mv codegen/Gen src
+	mkdir -p codegen/Gen
+	mv src/Gen/CodeGen codegen/Gen/
