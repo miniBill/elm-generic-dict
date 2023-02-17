@@ -6,12 +6,10 @@ import IdDict exposing (Id(..), IdDict)
 
 main : Html msg
 main =
-    Html.text <|
-        if test then
-            "Empty"
-
-        else
-            "Nonempty"
+    dict
+        |> IdDict.get (Id "foo")
+        |> Maybe.withDefault "not found"
+        |> Html.text
 
 
 dict : IdDict String
