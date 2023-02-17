@@ -1,13 +1,25 @@
 module Main exposing (main)
 
-
-import IdDict exposing (IdDict)
-
-main = Html.text "..."
+import Html exposing (Html)
+import IdDict exposing (Id(..), IdDict)
 
 
-dict = IdDict.fromList []
+main : Html msg
+main =
+    Html.text <|
+        if test then
+            "Empty"
+
+        else
+            "Nonempty"
 
 
-test = IdDict.isEmpty dict
+dict : IdDict String
+dict =
+    [ ( Id "foo", "bar" ) ]
+        |> IdDict.fromList
 
+
+test : Bool
+test =
+    IdDict.isEmpty dict
