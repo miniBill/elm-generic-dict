@@ -23,7 +23,7 @@ module Generate exposing (main)
 import Elm
 import Elm.Annotation as Type
 import Gen.CodeGen.Generate as Generate
-import Gen.UUID as UUID
+import Gen.UUID
 import GenericDict
 
 
@@ -37,15 +37,14 @@ main =
 customDictFile : Elm.File
 customDictFile =
     GenericDict.init
-        { keyType = Type.namedWith [ "UUID" ] "UUID" []
+        { keyType = Gen.UUID.annotation_.uUID
         , namespace = []
-        , toComparable = UUID.toString
+        , toComparable = Gen.UUID.toString
         }
         |> GenericDict.withTypeName "UuidDict"
         |> GenericDict.generateFile
-
 ```
 
 * run `elm-codegen run` to have it create the `generated/UuidDict.elm`
 * update your `elm.json` to include `generated/` as a `source-directory`
-* import it as `Import UuidDict` to use it like a `UuidDict UUID.UUID a`
+* import it as `Import UuidDict exposing (UuidDict)` to use it like a `UuidDict a`
