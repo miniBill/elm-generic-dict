@@ -4,7 +4,7 @@
   "description": "REPLACEME",
   "devDependencies": {
     "elm-codegen": "^0.5.0",
-    "elm-review": "^2.7.5",
+    "elm-review": "^2.10.2",
     "elm-test": "latest-0.19.1",
     "elm-tooling": "1.6.0",
     "elm-verify-examples": "5.2.0",
