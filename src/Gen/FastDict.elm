@@ -1,12 +1,13 @@
-module Gen.FastDict exposing (annotation_, call_, diff, empty, equals, filter, foldl, foldr, fromCoreDict, fromList, get, getMax, getMaxKey, getMin, getMinKey, insert, intersect, isEmpty, keys, map, member, merge, moduleName_, partition, popMax, popMin, remove, singleton, size, toCoreDict, toList, union, update, values, values_)
+module Gen.FastDict exposing (annotation_, call_, caseOf_, diff, empty, equals, filter, foldl, foldr, fromCoreDict, fromList, get, getMax, getMaxKey, getMin, getMinKey, insert, intersect, isEmpty, keys, make_, map, member, merge, moduleName_, partition, popMax, popMin, remove, restructure, singleton, size, stoppableFoldl, stoppableFoldr, toCoreDict, toList, union, update, values, values_)
 
 {-| 
-@docs values_, call_, annotation_, fromCoreDict, toCoreDict, merge, diff, intersect, union, partition, filter, foldr, foldl, map, fromList, toList, values, keys, popMax, popMin, getMax, getMaxKey, getMin, getMinKey, equals, size, get, member, isEmpty, remove, update, insert, singleton, empty, moduleName_
+@docs values_, call_, caseOf_, make_, annotation_, restructure, stoppableFoldr, stoppableFoldl, fromCoreDict, toCoreDict, merge, diff, intersect, union, partition, filter, foldr, foldl, map, fromList, toList, values, keys, popMax, popMin, getMax, getMaxKey, getMin, getMinKey, equals, size, get, member, isEmpty, remove, update, insert, singleton, empty, moduleName_
 -}
 
 
 import Elm
 import Elm.Annotation as Type
+import Elm.Case
 
 
 {-| The name of this module. -}
@@ -1230,7 +1231,195 @@ fromCoreDict fromCoreDictArg =
         [ fromCoreDictArg ]
 
 
-annotation_ : { dict : Type.Annotation -> Type.Annotation -> Type.Annotation }
+{-| A foldl that can stop early instead of traversing the whole dictionary.
+
+    stoppableFoldl
+        (\k v acc ->
+            if k >= 10 then
+                Stop acc
+            else
+                Continue (v + acc)
+        )
+        0
+        (fromList <| List.indexedMap Tuple.pair <| List.range 1 10000)
+    --> 55
+
+stoppableFoldl: (k -> v -> acc -> FastDict.Step acc) -> acc -> FastDict.Dict k v -> acc
+-}
+stoppableFoldl :
+    (Elm.Expression -> Elm.Expression -> Elm.Expression -> Elm.Expression)
+    -> Elm.Expression
+    -> Elm.Expression
+    -> Elm.Expression
+stoppableFoldl stoppableFoldlArg stoppableFoldlArg0 stoppableFoldlArg1 =
+    Elm.apply
+        (Elm.value
+            { importFrom = [ "FastDict" ]
+            , name = "stoppableFoldl"
+            , annotation =
+                Just
+                    (Type.function
+                        [ Type.function
+                            [ Type.var "k", Type.var "v", Type.var "acc" ]
+                            (Type.namedWith
+                                [ "FastDict" ]
+                                "Step"
+                                [ Type.var "acc" ]
+                            )
+                        , Type.var "acc"
+                        , Type.namedWith
+                            [ "FastDict" ]
+                            "Dict"
+                            [ Type.var "k", Type.var "v" ]
+                        ]
+                        (Type.var "acc")
+                    )
+            }
+        )
+        [ Elm.functionReduced
+            "stoppableFoldlUnpack"
+            (\functionReducedUnpack ->
+                Elm.functionReduced
+                    "unpack"
+                    (\functionReducedUnpack0 ->
+                        Elm.functionReduced
+                            "unpack"
+                            (stoppableFoldlArg functionReducedUnpack
+                                functionReducedUnpack0
+                            )
+                    )
+            )
+        , stoppableFoldlArg0
+        , stoppableFoldlArg1
+        ]
+
+
+{-| A foldr that can stop early instead of traversing the whole dictionary.
+
+    stoppableFoldr
+        (\k v acc ->
+            if k <= 9990 then
+                Stop acc
+            else
+                Continue (v + acc)
+        )
+        0
+        (fromList <| List.indexedMap Tuple.pair <| List.range 1 10000)
+    --> 89964
+
+stoppableFoldr: (k -> v -> acc -> FastDict.Step acc) -> acc -> FastDict.Dict k v -> acc
+-}
+stoppableFoldr :
+    (Elm.Expression -> Elm.Expression -> Elm.Expression -> Elm.Expression)
+    -> Elm.Expression
+    -> Elm.Expression
+    -> Elm.Expression
+stoppableFoldr stoppableFoldrArg stoppableFoldrArg0 stoppableFoldrArg1 =
+    Elm.apply
+        (Elm.value
+            { importFrom = [ "FastDict" ]
+            , name = "stoppableFoldr"
+            , annotation =
+                Just
+                    (Type.function
+                        [ Type.function
+                            [ Type.var "k", Type.var "v", Type.var "acc" ]
+                            (Type.namedWith
+                                [ "FastDict" ]
+                                "Step"
+                                [ Type.var "acc" ]
+                            )
+                        , Type.var "acc"
+                        , Type.namedWith
+                            [ "FastDict" ]
+                            "Dict"
+                            [ Type.var "k", Type.var "v" ]
+                        ]
+                        (Type.var "acc")
+                    )
+            }
+        )
+        [ Elm.functionReduced
+            "stoppableFoldrUnpack"
+            (\functionReducedUnpack ->
+                Elm.functionReduced
+                    "unpack"
+                    (\functionReducedUnpack0 ->
+                        Elm.functionReduced
+                            "unpack"
+                            (stoppableFoldrArg functionReducedUnpack
+                                functionReducedUnpack0
+                            )
+                    )
+            )
+        , stoppableFoldrArg0
+        , stoppableFoldrArg1
+        ]
+
+
+{-| This allows you to take advantage of the tree structure of the dictionary to do some operations more efficiently.
+
+Calling `left` will give the result of calling `restructure` on the left subtree (lower keys), `right` on the right one (higher keys).
+
+If this is confusing you probably don't need this function!
+
+    any dict =
+        -- Notice how if `value` is `True` we don't call `left` nor `right`,
+        -- and if `value` is `False` but `left ()` is `True` we don't call right.
+        restructure False (\{ value, left, right } -> value || left () || right ())
+
+restructure: 
+    acc
+    -> ({ key : key, value : value, left : () -> acc, right : () -> acc } -> acc)
+    -> FastDict.Dict key value
+    -> acc
+-}
+restructure :
+    Elm.Expression
+    -> (Elm.Expression -> Elm.Expression)
+    -> Elm.Expression
+    -> Elm.Expression
+restructure restructureArg restructureArg0 restructureArg1 =
+    Elm.apply
+        (Elm.value
+            { importFrom = [ "FastDict" ]
+            , name = "restructure"
+            , annotation =
+                Just
+                    (Type.function
+                        [ Type.var "acc"
+                        , Type.function
+                            [ Type.record
+                                [ ( "key", Type.var "key" )
+                                , ( "value", Type.var "value" )
+                                , ( "left"
+                                  , Type.function [ Type.unit ] (Type.var "acc")
+                                  )
+                                , ( "right"
+                                  , Type.function [ Type.unit ] (Type.var "acc")
+                                  )
+                                ]
+                            ]
+                            (Type.var "acc")
+                        , Type.namedWith
+                            [ "FastDict" ]
+                            "Dict"
+                            [ Type.var "key", Type.var "value" ]
+                        ]
+                        (Type.var "acc")
+                    )
+            }
+        )
+        [ restructureArg
+        , Elm.functionReduced "restructureUnpack" restructureArg0
+        , restructureArg1
+        ]
+
+
+annotation_ :
+    { dict : Type.Annotation -> Type.Annotation -> Type.Annotation
+    , step : Type.Annotation -> Type.Annotation
+    }
 annotation_ =
     { dict =
         \dictArg0 dictArg1 ->
@@ -1243,6 +1432,61 @@ annotation_ =
                     "Dict"
                     [ Type.var "k", Type.var "v" ]
                 )
+    , step = \stepArg0 -> Type.namedWith [ "FastDict" ] "Step" [ stepArg0 ]
+    }
+
+
+make_ :
+    { continue : Elm.Expression -> Elm.Expression
+    , stop : Elm.Expression -> Elm.Expression
+    }
+make_ =
+    { continue =
+        \ar0 ->
+            Elm.apply
+                (Elm.value
+                    { importFrom = [ "FastDict" ]
+                    , name = "Continue"
+                    , annotation =
+                        Just (Type.namedWith [] "Step" [ Type.var "a" ])
+                    }
+                )
+                [ ar0 ]
+    , stop =
+        \ar0 ->
+            Elm.apply
+                (Elm.value
+                    { importFrom = [ "FastDict" ]
+                    , name = "Stop"
+                    , annotation =
+                        Just (Type.namedWith [] "Step" [ Type.var "a" ])
+                    }
+                )
+                [ ar0 ]
+    }
+
+
+caseOf_ :
+    { step :
+        Elm.Expression
+        -> { stepTags_0_0
+            | continue : Elm.Expression -> Elm.Expression
+            , stop : Elm.Expression -> Elm.Expression
+        }
+        -> Elm.Expression
+    }
+caseOf_ =
+    { step =
+        \stepExpression stepTags ->
+            Elm.Case.custom
+                stepExpression
+                (Type.namedWith [ "FastDict" ] "Step" [ Type.var "a" ])
+                [ Elm.Case.branch1
+                    "Continue"
+                    ( "a", Type.var "a" )
+                    stepTags.continue
+                , Elm.Case.branch1 "Stop" ( "a", Type.var "a" ) stepTags.stop
+                ]
     }
 
 
@@ -1288,6 +1532,12 @@ call_ :
         -> Elm.Expression
     , toCoreDict : Elm.Expression -> Elm.Expression
     , fromCoreDict : Elm.Expression -> Elm.Expression
+    , stoppableFoldl :
+        Elm.Expression -> Elm.Expression -> Elm.Expression -> Elm.Expression
+    , stoppableFoldr :
+        Elm.Expression -> Elm.Expression -> Elm.Expression -> Elm.Expression
+    , restructure :
+        Elm.Expression -> Elm.Expression -> Elm.Expression -> Elm.Expression
     }
 call_ =
     { singleton =
@@ -2022,6 +2272,103 @@ call_ =
                     }
                 )
                 [ fromCoreDictArg ]
+    , stoppableFoldl =
+        \stoppableFoldlArg stoppableFoldlArg0 stoppableFoldlArg1 ->
+            Elm.apply
+                (Elm.value
+                    { importFrom = [ "FastDict" ]
+                    , name = "stoppableFoldl"
+                    , annotation =
+                        Just
+                            (Type.function
+                                [ Type.function
+                                    [ Type.var "k"
+                                    , Type.var "v"
+                                    , Type.var "acc"
+                                    ]
+                                    (Type.namedWith
+                                        [ "FastDict" ]
+                                        "Step"
+                                        [ Type.var "acc" ]
+                                    )
+                                , Type.var "acc"
+                                , Type.namedWith
+                                    [ "FastDict" ]
+                                    "Dict"
+                                    [ Type.var "k", Type.var "v" ]
+                                ]
+                                (Type.var "acc")
+                            )
+                    }
+                )
+                [ stoppableFoldlArg, stoppableFoldlArg0, stoppableFoldlArg1 ]
+    , stoppableFoldr =
+        \stoppableFoldrArg stoppableFoldrArg0 stoppableFoldrArg1 ->
+            Elm.apply
+                (Elm.value
+                    { importFrom = [ "FastDict" ]
+                    , name = "stoppableFoldr"
+                    , annotation =
+                        Just
+                            (Type.function
+                                [ Type.function
+                                    [ Type.var "k"
+                                    , Type.var "v"
+                                    , Type.var "acc"
+                                    ]
+                                    (Type.namedWith
+                                        [ "FastDict" ]
+                                        "Step"
+                                        [ Type.var "acc" ]
+                                    )
+                                , Type.var "acc"
+                                , Type.namedWith
+                                    [ "FastDict" ]
+                                    "Dict"
+                                    [ Type.var "k", Type.var "v" ]
+                                ]
+                                (Type.var "acc")
+                            )
+                    }
+                )
+                [ stoppableFoldrArg, stoppableFoldrArg0, stoppableFoldrArg1 ]
+    , restructure =
+        \restructureArg restructureArg0 restructureArg1 ->
+            Elm.apply
+                (Elm.value
+                    { importFrom = [ "FastDict" ]
+                    , name = "restructure"
+                    , annotation =
+                        Just
+                            (Type.function
+                                [ Type.var "acc"
+                                , Type.function
+                                    [ Type.record
+                                        [ ( "key", Type.var "key" )
+                                        , ( "value", Type.var "value" )
+                                        , ( "left"
+                                          , Type.function
+                                                [ Type.unit ]
+                                                (Type.var "acc")
+                                          )
+                                        , ( "right"
+                                          , Type.function
+                                                [ Type.unit ]
+                                                (Type.var "acc")
+                                          )
+                                        ]
+                                    ]
+                                    (Type.var "acc")
+                                , Type.namedWith
+                                    [ "FastDict" ]
+                                    "Dict"
+                                    [ Type.var "key", Type.var "value" ]
+                                ]
+                                (Type.var "acc")
+                            )
+                    }
+                )
+                [ restructureArg, restructureArg0, restructureArg1 ]
     }
 
 
@@ -2057,6 +2404,9 @@ values_ :
     , merge : Elm.Expression
     , toCoreDict : Elm.Expression
     , fromCoreDict : Elm.Expression
+    , stoppableFoldl : Elm.Expression
+    , stoppableFoldr : Elm.Expression
+    , restructure : Elm.Expression
     }
 values_ =
     { empty =
@@ -2662,6 +3012,81 @@ values_ =
                             "Dict"
                             [ Type.var "comparable", Type.var "v" ]
                         )
+                    )
+            }
+    , stoppableFoldl =
+        Elm.value
+            { importFrom = [ "FastDict" ]
+            , name = "stoppableFoldl"
+            , annotation =
+                Just
+                    (Type.function
+                        [ Type.function
+                            [ Type.var "k", Type.var "v", Type.var "acc" ]
+                            (Type.namedWith
+                                [ "FastDict" ]
+                                "Step"
+                                [ Type.var "acc" ]
+                            )
+                        , Type.var "acc"
+                        , Type.namedWith
+                            [ "FastDict" ]
+                            "Dict"
+                            [ Type.var "k", Type.var "v" ]
+                        ]
+                        (Type.var "acc")
+                    )
+            }
+    , stoppableFoldr =
+        Elm.value
+            { importFrom = [ "FastDict" ]
+            , name = "stoppableFoldr"
+            , annotation =
+                Just
+                    (Type.function
+                        [ Type.function
+                            [ Type.var "k", Type.var "v", Type.var "acc" ]
+                            (Type.namedWith
+                                [ "FastDict" ]
+                                "Step"
+                                [ Type.var "acc" ]
+                            )
+                        , Type.var "acc"
+                        , Type.namedWith
+                            [ "FastDict" ]
+                            "Dict"
+                            [ Type.var "k", Type.var "v" ]
+                        ]
+                        (Type.var "acc")
+                    )
+            }
+    , restructure =
+        Elm.value
+            { importFrom = [ "FastDict" ]
+            , name = "restructure"
+            , annotation =
+                Just
+                    (Type.function
+                        [ Type.var "acc"
+                        , Type.function
+                            [ Type.record
+                                [ ( "key", Type.var "key" )
+                                , ( "value", Type.var "value" )
+                                , ( "left"
+                                  , Type.function [ Type.unit ] (Type.var "acc")
+                                  )
+                                , ( "right"
+                                  , Type.function [ Type.unit ] (Type.var "acc")
+                                  )
+                                ]
+                            ]
+                            (Type.var "acc")
+                        , Type.namedWith
+                            [ "FastDict" ]
+                            "Dict"
+                            [ Type.var "key", Type.var "value" ]
+                        ]
+                        (Type.var "acc")
                     )
             }
     }
