@@ -14,7 +14,7 @@ The main disadvantage of using this approach is code duplication, while the adva
 
 Say you'd like a `Dict` of `UUID.UUID`: 
 
-* First, follow elm-codegen's [docs](https://github.com/mdgriffith/elm-codegen/blob/main/guide/UsingHelpers.md), on installing packages.
+* First, follow elm-codegen's [docs](https://github.com/mdgriffith/elm-codegen/blob/main/guide/UsingHelpers.md), on installing packages
 * edit the `codegen/Generate.elm` to look something like
 
 ```elm
@@ -47,3 +47,5 @@ customDictFile =
 ```
 
 * run `elm-codegen run` to have it create the `generated/UuidDict.elm`
+* update your `elm.json` to include `generated/` as a `source-directory`
+* import it as `Import UuidDict` to use it like a `UuidDict UUID.UUID a`
