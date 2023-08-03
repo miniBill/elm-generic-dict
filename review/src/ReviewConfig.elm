@@ -83,5 +83,6 @@ config =
                 rule
                     |> Rule.ignoreErrorsForDirectories
                         [ "tests/VerifyExamples" -- this is a generated folder
+                        , "src/Gen"
                         ]
             )
