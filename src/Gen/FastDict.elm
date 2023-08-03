@@ -1,7 +1,7 @@
 module Gen.FastDict exposing (annotation_, call_, diff, empty, equals, filter, foldl, foldr, fromCoreDict, fromList, get, getMax, getMaxKey, getMin, getMinKey, insert, intersect, isEmpty, keys, map, member, merge, moduleName_, partition, popMax, popMin, remove, singleton, size, toCoreDict, toList, union, update, values, values_)
 
 {-| 
-@docs values_, call_, annotation_, fromCoreDict, toCoreDict, merge, diff, intersect, union, partition, filter, foldr, foldl, map, fromList, toList, values, keys, popMax, popMin, getMax, getMaxKey, getMin, getMinKey, equals, size, get, member, isEmpty, remove, update, insert, singleton, empty, moduleName_
+@docs moduleName_, empty, singleton, insert, update, remove, isEmpty, member, get, size, equals, getMinKey, getMin, getMaxKey, getMax, popMin, popMax, keys, values, toList, fromList, map, foldl, foldr, filter, partition, union, intersect, diff, merge, toCoreDict, fromCoreDict, annotation_, call_, values_
 -}
 
 
@@ -2665,5 +2665,3 @@ values_ =
                     )
             }
     }
-
-
