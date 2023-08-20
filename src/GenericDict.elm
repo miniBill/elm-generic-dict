@@ -89,7 +89,7 @@ This can be useful if you want to add your own custom declarations to the file.
 
 -}
 generateDeclarations : Config -> List Elm.Declaration
-generateDeclarations ((Config { keyType, toComparable, namespace, useFast }) as config) =
+generateDeclarations ((Config { keyType, toComparable, useFast }) as config) =
     let
         dictTypeName : String
         dictTypeName =
@@ -101,7 +101,7 @@ generateDeclarations ((Config { keyType, toComparable, namespace, useFast }) as 
 
         annotation : String -> Type.Annotation
         annotation value =
-            Type.namedWith namespace dictTypeName <|
+            Type.namedWith [] dictTypeName <|
                 List.map Type.var <|
                     getVariables keyType
                         ++ [ value ]
