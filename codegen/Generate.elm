@@ -12,6 +12,7 @@ import Elm.Case
 import Gen.CodeGen.Generate as Generate
 import Gen.Maybe
 import GenericDict
+import GenericSet
 
 
 {-| Generate an example custom dictionary for `comparable`.
@@ -30,6 +31,12 @@ main =
         , namespace = []
         }
         |> GenericDict.generateFile
+    , GenericSet.init
+        { valueType = Gen.Maybe.annotation_.maybe Type.int
+        , toComparable = Gen.Maybe.withDefault (Elm.int 0)
+        , namespace = []
+        }
+        |> GenericSet.generateFile
     , let
         idType : Type.Annotation
         idType =

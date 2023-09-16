@@ -1,10 +1,10 @@
 .PHONY: all
 all: docs.json generated/IdDict.elm
 
-docs.json: src/GenericDict.elm Makefile
+docs.json: src/GenericDict.elm src/GenericSet.elm Makefile
 	lamdera make --docs=$@
 
-generated/IdDict.elm: codegen/Generate.elm src/GenericDict.elm src/Gen/Basics.elm Makefile
+generated/IdDict.elm: codegen/Generate.elm src/GenericDict.elm src/GenericSet.elm src/Gen/Basics.elm Makefile
 	rm -rf generated
 	npx elm-codegen run
 

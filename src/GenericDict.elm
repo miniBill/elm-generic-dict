@@ -32,6 +32,7 @@ import Gen.FastDict
 import Gen.List
 import Gen.Maybe
 import Gen.Tuple
+import Internal
 import String.Extra
 
 
@@ -103,7 +104,7 @@ generateDeclarations ((Config { keyType, toComparable, useFast }) as config) =
         annotation value =
             Type.namedWith [] dictTypeName <|
                 List.map Type.var <|
-                    getVariables keyType
+                    Internal.getVariables keyType
                         ++ [ value ]
 
         utils : Utils
@@ -174,7 +175,7 @@ toComparableType (Config { keyType, toComparable }) =
                             h
                             (List.map
                                 (\t ->
-                                    if isLower t then
+                                    if Internal.isLower t then
                                         Type.var t
 
                                     else
@@ -751,32 +752,3 @@ popMaxDeclaration ({ annotation } as utils) =
         (decomposeDict utils Gen.FastDict.popMax)
         |> Elm.declaration "popMax"
         |> Elm.exposeWith { exposeConstructor = False, group = Just "Min / Max" }
-
-
-
---- Hic Sunt Leones ---
-
-
-getVariables : Type.Annotation -> List String
-getVariables annotation =
-    -- TODO: fix this
-    Elm.ToString.annotation annotation
-        |> .signature
-        -- I'm sorry
-        |> String.replace "(" " "
-        |> String.replace ")" " "
-        |> String.replace "," " "
-        -- Really sorry
-        |> String.split " "
-        |> List.map String.trim
-        |> List.filter isLower
-
-
-isLower : String -> Bool
-isLower s =
-    let
-        first : String
-        first =
-            String.left 1 s
-    in
-    String.toLower first == first
