@@ -3,7 +3,7 @@
     "name": "miniBill/elm-generic-dict",
     "summary": "Codegen dictionaries and sets with arbitrary key types.",
     "license": "BSD-3-Clause",
-    "version": "1.0.3",
+    "version": "1.1.0",
     "exposed-modules": [
         "GenericDict",
         "GenericSet"
